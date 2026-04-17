@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { supabase } from "./supabase";
 
 const C = {
   bg: "#0a0f1e", panel: "#0f1729", border: "#1e2d4a",
@@ -253,7 +254,7 @@ export default function App() {
   const [snapHint,setSnapHint]=useState(null);
   const [cond,setCond]=useState(EMPTY_COND);
   const [user,setUser]=useState(()=>localStorage.getItem(LS_USER)||"");
-  const [saved,setSaved]=useState(()=>loadSessions());
+  const [saved,setSaved]=useState([]);
   const [showLog,setShowLog]=useState(false);
   const canvasRef=useRef(null);
   const wrapperRef=useRef(null);
@@ -261,6 +262,22 @@ export default function App() {
   const stateRef=useRef({points:[],mode:"upload",imgObj:null,snapHint:null});
   useEffect(()=>{stateRef.current={points,mode,imgObj,snapHint};},[points,mode,imgObj,snapHint]);
   useEffect(()=>{localStorage.setItem(LS_USER,user);},[user]);
+  useEffect(()=>{
+    const fetchSessions=async()=>{
+      const{data,error}=await supabase.from("sessions").select("*").order("created_at",{ascending:false});
+      if(!error&&data){
+        setSaved(data.map(s=>({
+          id:s.id,snapshot:s.snapshot,user:s.user_name,
+          metrics:{draftPosition:s.draft_position,maxDraft:s.max_draft,twist:s.twist},
+          cond:{boatClass:s.boat_class,sailNumber:s.sail_number,date:s.date,location:s.location,
+            windKnots:s.wind_knots,windDir:s.wind_dir,windStability:s.wind_stability,
+            waveHeight:s.wave_height,waveType:s.wave_type,outhaul:s.outhaul,
+            cunningham:s.cunningham,vang:s.vang,comment:s.comment},
+        })));
+      }
+    };
+    fetchSessions();
+  },[]);
 
   const draw=useCallback(()=>{
     const canvas=canvasRef.current,wrapper=wrapperRef.current;
@@ -368,10 +385,28 @@ export default function App() {
     setMode("conditions");
   };
 
-  const handleSave=()=>{
+  const handleSave=async()=>{
     if(!metrics)return;
-    const newSession={metrics,cond,user,snapshot:snapshotRef.current,id:Date.now()};
-    setSaved(prev=>{const next=[...prev,newSession];saveSessions(next);return next;});
+    const snapshot=snapshotRef.current;
+    const{data,error}=await supabase.from("sessions").insert({
+      user_name:user,boat_class:cond.boatClass,sail_number:cond.sailNumber,
+      date:cond.date,location:cond.location,
+      draft_position:metrics.draftPosition,max_draft:metrics.maxDraft,twist:metrics.twist,
+      wind_knots:cond.windKnots,wind_dir:cond.windDir,wind_stability:cond.windStability,
+      wave_height:cond.waveHeight,wave_type:cond.waveType,
+      outhaul:cond.outhaul,cunningham:cond.cunningham,vang:cond.vang,
+      comment:cond.comment,snapshot,
+    }).select().single();
+    if(error){console.error("保存エラー:",error);alert("保存に失敗しました");return;}
+    if(user)localStorage.setItem(LS_USER,user);
+    setSaved(prev=>[{
+      id:data.id,snapshot:data.snapshot,user:data.user_name,
+      metrics:{draftPosition:data.draft_position,maxDraft:data.max_draft,twist:data.twist},
+      cond:{boatClass:data.boat_class,sailNumber:data.sail_number,date:data.date,location:data.location,
+        windKnots:data.wind_knots,windDir:data.wind_dir,windStability:data.wind_stability,
+        waveHeight:data.wave_height,waveType:data.wave_type,outhaul:data.outhaul,
+        cunningham:data.cunningham,vang:data.vang,comment:data.comment},
+    },...prev]);
     setMode("upload");setImgObj(null);setPoints([]);setMetrics(null);setCond(EMPTY_COND);
   };
 
