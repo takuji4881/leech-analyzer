@@ -246,6 +246,62 @@ function LogModal({saved,onClose,onExport}) {
   );
 }
 
+function AuthScreen({onAuth}){
+  const [isLogin,setIsLogin]=useState(true);
+  const [email,setEmail]=useState("");
+  const [password,setPassword]=useState("");
+  const [err,setErr]=useState("");
+  const [msg,setMsg]=useState("");
+  const [loading,setLoading]=useState(false);
+
+  const handle=async()=>{
+    setErr("");setMsg("");setLoading(true);
+    const{data,error}=isLogin
+      ?await supabase.auth.signInWithPassword({email,password})
+      :await supabase.auth.signUp({email,password});
+    setLoading(false);
+    if(error){setErr(error.message);return;}
+    if(!isLogin&&!data.session){setMsg("確認メールを送信しました。メールを確認してからログインしてください。");return;}
+    onAuth(data.session?.user??data.user);
+  };
+
+  return(
+    <div style={{height:"100vh",background:C.bg,color:C.text,fontFamily:"'DM Mono','Courier New',monospace",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
+      <div style={{marginBottom:28,textAlign:"center"}}>
+        <svg width="32" height="32" viewBox="0 0 28 28" fill="none" style={{marginBottom:8}}>
+          <path d="M14 2 L26 24 L14 20 L2 24 Z" stroke={C.accent} strokeWidth="1.8" fill="none"/>
+          <path d="M14 2 L14 20" stroke={C.accent} strokeWidth="1.2" opacity="0.5"/>
+        </svg>
+        <div style={{fontSize:14,fontWeight:700,letterSpacing:"0.14em",color:C.accent}}>LEECH ANALYZER</div>
+        <div style={{fontSize:9,color:C.textDim,letterSpacing:"0.2em",marginTop:2}}>SAIL SHAPE LOGGER</div>
+      </div>
+      <div style={{width:"100%",maxWidth:340,background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:24,display:"flex",flexDirection:"column",gap:16}}>
+        <div style={{display:"flex",borderRadius:4,overflow:"hidden",border:`1px solid ${C.border}`}}>
+          {["ログイン","新規登録"].map((t,i)=>(
+            <button key={t} onClick={()=>{setIsLogin(i===0);setErr("");setMsg("");}}
+              style={{flex:1,padding:"8px",fontSize:10,fontFamily:"inherit",letterSpacing:"0.1em",border:"none",background:(isLogin?i===0:i===1)?"rgba(0,200,255,0.15)":"transparent",color:(isLogin?i===0:i===1)?C.accent:C.textDim,cursor:"pointer"}}>
+              {t}
+            </button>
+          ))}
+        </div>
+        <Field label="メールアドレス">
+          <TextIn value={email} onChange={setEmail} placeholder="sailor@example.com"/>
+        </Field>
+        <Field label="パスワード">
+          <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="8文字以上"
+            style={{background:"rgba(255,255,255,0.04)",border:`1px solid ${C.border}`,borderRadius:4,padding:"6px 9px",color:C.text,fontSize:11,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"}}/>
+        </Field>
+        {err&&<div style={{fontSize:10,color:"#ff6b6b"}}>{err}</div>}
+        {msg&&<div style={{fontSize:10,color:C.point,lineHeight:1.6}}>{msg}</div>}
+        <button onClick={handle} disabled={loading||!email||!password}
+          style={{background:loading||!email||!password?"#1a2a3a":C.accent,color:loading||!email||!password?C.textDim:C.bg,border:"none",borderRadius:4,padding:"10px",fontSize:11,fontFamily:"inherit",letterSpacing:"0.12em",fontWeight:700,cursor:loading||!email||!password?"not-allowed":"pointer"}}>
+          {loading?"処理中...":(isLogin?"LOGIN →":"SIGN UP →")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [imgObj,setImgObj]=useState(null);
   const [points,setPoints]=useState([]);
@@ -256,15 +312,29 @@ export default function App() {
   const [user,setUser]=useState(()=>localStorage.getItem(LS_USER)||"");
   const [saved,setSaved]=useState([]);
   const [showLog,setShowLog]=useState(false);
+  const [authUser,setAuthUser]=useState(null);
+  const [authReady,setAuthReady]=useState(false);
   const canvasRef=useRef(null);
   const wrapperRef=useRef(null);
   const snapshotRef=useRef(null);
   const stateRef=useRef({points:[],mode:"upload",imgObj:null,snapHint:null});
   useEffect(()=>{stateRef.current={points,mode,imgObj,snapHint};},[points,mode,imgObj,snapHint]);
+  useEffect(()=>{
+    supabase.auth.getSession().then(({data:{session}})=>{
+      setAuthUser(session?.user??null);
+      setAuthReady(true);
+    });
+    const{data:{subscription}}=supabase.auth.onAuthStateChange((_,session)=>{
+      setAuthUser(session?.user??null);
+    });
+    return()=>subscription.unsubscribe();
+  },[]);
+
   useEffect(()=>{localStorage.setItem(LS_USER,user);},[user]);
   useEffect(()=>{
+    if(!authUser)return;
     const fetchSessions=async()=>{
-      const{data,error}=await supabase.from("sessions").select("*").order("created_at",{ascending:false});
+      const{data,error}=await supabase.from("sessions").select("*").eq("user_id",authUser.id).order("created_at",{ascending:false});
       if(!error&&data){
         setSaved(data.map(s=>({
           id:s.id,snapshot:s.snapshot,user:s.user_name,
@@ -277,7 +347,7 @@ export default function App() {
       }
     };
     fetchSessions();
-  },[]);
+  },[authUser]);
 
   const draw=useCallback(()=>{
     const canvas=canvasRef.current,wrapper=wrapperRef.current;
@@ -389,7 +459,7 @@ export default function App() {
     if(!metrics)return;
     const snapshot=snapshotRef.current;
     const{data,error}=await supabase.from("sessions").insert({
-      user_name:user,boat_class:cond.boatClass,sail_number:cond.sailNumber,
+      user_id:authUser?.id,user_name:user,boat_class:cond.boatClass,sail_number:cond.sailNumber,
       date:cond.date,location:cond.location,
       draft_position:metrics.draftPosition,max_draft:metrics.maxDraft,twist:metrics.twist,
       wind_knots:cond.windKnots,wind_dir:cond.windDir,wind_stability:cond.windStability,
@@ -422,6 +492,9 @@ export default function App() {
     conditions:"コンディションを入力（すべて任意）",
   }[mode]||"";
 
+  if(!authReady) return <div style={{height:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{color:C.textDim,fontSize:11,letterSpacing:"0.15em"}}>LOADING...</div></div>;
+  if(!authUser) return <AuthScreen onAuth={u=>setAuthUser(u)}/>;
+
   return (
     <div style={{height:"100vh",background:C.bg,color:C.text,fontFamily:"'DM Mono','Courier New',monospace",display:"flex",flexDirection:"column",overflow:"hidden"}}>
       <div style={{borderBottom:`1px solid ${C.border}`,padding:"9px 16px",display:"flex",alignItems:"center",gap:12,background:C.panel,flexShrink:0}}>
@@ -437,7 +510,11 @@ export default function App() {
           <button onClick={()=>setShowLog(true)} style={{background:"transparent",border:`1px solid ${saved.length>0?C.accentDim:C.border}`,borderRadius:3,padding:"3px 10px",fontSize:10,color:saved.length>0?C.accent:C.textDim,fontFamily:"inherit",cursor:"pointer",letterSpacing:"0.1em",fontWeight:saved.length>0?700:400}}>
             LOG {saved.length>0?`(${saved.length})`:""}
           </button>
-          <div style={{fontSize:9,color:C.textDim,border:`1px solid ${C.border}`,padding:"2px 8px",borderRadius:3}}>PROTO</div>
+          <div style={{fontSize:9,color:C.textDim,border:`1px solid ${C.border}`,padding:"2px 8px",borderRadius:3,maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={authUser?.email}>{authUser?.email?.split("@")[0]}</div>
+          <button onClick={async()=>{await supabase.auth.signOut();setAuthUser(null);setSaved([]);}}
+            style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:3,padding:"2px 8px",fontSize:9,color:C.textDim,fontFamily:"inherit",cursor:"pointer",letterSpacing:"0.1em"}}>
+            LOGOUT
+          </button>
         </div>
       </div>
 
