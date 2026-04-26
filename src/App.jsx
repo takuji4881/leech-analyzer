@@ -206,8 +206,8 @@ function LogModal({saved,onClose,onExport}) {
         {filtered.map(s=>(
           <div key={s.id} style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:6,overflow:"hidden"}}>
             <div style={{display:"flex",gap:12,padding:"12px 14px",alignItems:"flex-start"}}>
-              {s.snapshot&&(
-                <img src={s.snapshot} onClick={()=>setExpanded(expanded===s.id?null:s.id)}
+              {(s.annotatedImageUrl||s.originalImageUrl)&&(
+                <img src={s.annotatedImageUrl||s.originalImageUrl} onClick={()=>setExpanded(expanded===s.id?null:s.id)}
                   style={{width:72,height:72,objectFit:"cover",borderRadius:4,border:`1px solid ${C.border}`,cursor:"pointer",flexShrink:0}} alt="sail"/>
               )}
               <div style={{flex:1,display:"flex",flexDirection:"column",gap:5,minWidth:0}}>
@@ -236,8 +236,8 @@ function LogModal({saved,onClose,onExport}) {
                 {s.cond?.comment&&<div style={{fontSize:10,color:C.textDim,fontStyle:"italic",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>"{s.cond.comment}"</div>}
               </div>
             </div>
-            {expanded===s.id&&s.snapshot&&(
-              <img src={s.snapshot} style={{width:"100%",display:"block",maxHeight:360,objectFit:"contain",background:"#050a14"}} alt="sail full"/>
+            {expanded===s.id&&(s.annotatedImageUrl||s.originalImageUrl)&&(
+              <img src={s.annotatedImageUrl||s.originalImageUrl} style={{width:"100%",display:"block",maxHeight:360,objectFit:"contain",background:"#050a14"}} alt="sail full"/>
             )}
           </div>
         ))}
@@ -317,6 +317,7 @@ export default function App() {
   const canvasRef=useRef(null);
   const wrapperRef=useRef(null);
   const snapshotRef=useRef(null);
+  const originalFileRef=useRef(null);
   const stateRef=useRef({points:[],mode:"upload",imgObj:null,snapHint:null});
   useEffect(()=>{stateRef.current={points,mode,imgObj,snapHint};},[points,mode,imgObj,snapHint]);
   useEffect(()=>{
@@ -337,7 +338,7 @@ export default function App() {
       const{data,error}=await supabase.from("sessions").select("*").eq("user_id",authUser.id).order("created_at",{ascending:false});
       if(!error&&data){
         setSaved(data.map(s=>({
-          id:s.id,snapshot:s.snapshot,user:s.user_name,
+          id:s.id,originalImageUrl:s.original_image_url,annotatedImageUrl:s.annotated_image_url,user:s.user_name,
           metrics:{draftPosition:s.draft_position,maxDraft:s.max_draft,twist:s.twist},
           cond:{boatClass:s.boat_class,sailNumber:s.sail_number,date:s.date,location:s.location,
             windKnots:s.wind_knots,windDir:s.wind_dir,windStability:s.wind_stability,
@@ -443,6 +444,7 @@ export default function App() {
 
   const handleFile=file=>{
     if(!file)return;
+    originalFileRef.current=file;
     const reader=new FileReader();
     reader.onload=ev=>{const img=new Image();img.onload=()=>{setImgObj(img);setPoints([]);setMetrics(null);setMode("setTop");setCond(prev=>({...prev,date:today()}));};img.src=ev.target.result;};
     reader.readAsDataURL(file);
@@ -457,20 +459,45 @@ export default function App() {
 
   const handleSave=async()=>{
     if(!metrics)return;
-    const snapshot=snapshotRef.current;
+    const ts=Date.now();
+    const uid=authUser?.id;
+
+    const uploadFile=async(file,path)=>{
+      const{error}=await supabase.storage.from("sail-images").upload(path,file,{upsert:true});
+      if(error)throw error;
+      return supabase.storage.from("sail-images").getPublicUrl(path).data.publicUrl;
+    };
+
+    let originalUrl=null,annotatedUrl=null;
+    try{
+      if(originalFileRef.current){
+        const ext=originalFileRef.current.name.split(".").pop()||"jpg";
+        originalUrl=await uploadFile(originalFileRef.current,`${uid}/${ts}_original.${ext}`);
+      }
+      if(snapshotRef.current){
+        const blob=await fetch(snapshotRef.current).then(r=>r.blob());
+        annotatedUrl=await uploadFile(blob,`${uid}/${ts}_annotated.jpg`);
+      }
+    }catch(e){console.error("画像アップロードエラー:",e);alert("画像のアップロードに失敗しました");return;}
+
     const{data,error}=await supabase.from("sessions").insert({
-      user_id:authUser?.id,user_name:user,boat_class:cond.boatClass,sail_number:cond.sailNumber,
+      user_id:uid,user_name:user,boat_class:cond.boatClass,sail_number:cond.sailNumber,
       date:cond.date,location:cond.location,
       draft_position:metrics.draftPosition,max_draft:metrics.maxDraft,twist:metrics.twist,
       wind_knots:cond.windKnots,wind_dir:cond.windDir,wind_stability:cond.windStability,
       wave_height:cond.waveHeight,wave_type:cond.waveType,
       outhaul:cond.outhaul,cunningham:cond.cunningham,vang:cond.vang,
-      comment:cond.comment,snapshot,
+      comment:cond.comment,
+      original_image_url:originalUrl,
+      annotated_image_url:annotatedUrl,
     }).select().single();
     if(error){console.error("保存エラー:",error);alert("保存に失敗しました");return;}
     if(user)localStorage.setItem(LS_USER,user);
     setSaved(prev=>[{
-      id:data.id,snapshot:data.snapshot,user:data.user_name,
+      id:data.id,
+      originalImageUrl:data.original_image_url,
+      annotatedImageUrl:data.annotated_image_url,
+      user:data.user_name,
       metrics:{draftPosition:data.draft_position,maxDraft:data.max_draft,twist:data.twist},
       cond:{boatClass:data.boat_class,sailNumber:data.sail_number,date:data.date,location:data.location,
         windKnots:data.wind_knots,windDir:data.wind_dir,windStability:data.wind_stability,
@@ -478,6 +505,7 @@ export default function App() {
         cunningham:data.cunningham,vang:data.vang,comment:data.comment},
     },...prev]);
     setMode("upload");setImgObj(null);setPoints([]);setMetrics(null);setCond(EMPTY_COND);
+    originalFileRef.current=null;
   };
 
   const top=points.find(p=>p.pct===0)||null;
