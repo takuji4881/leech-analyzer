@@ -463,9 +463,18 @@ export default function App() {
     const uid=authUser?.id;
 
     const uploadFile=async(file,path)=>{
-      const{error}=await supabase.storage.from("sail-images").upload(path,file,{upsert:true});
+      const{error}=await supabase.storage.from("sail-images").upload(path,file);
       if(error)throw error;
       return supabase.storage.from("sail-images").getPublicUrl(path).data.publicUrl;
+    };
+
+    const dataURLtoBlob=dataURL=>{
+      const[header,b64]=dataURL.split(",");
+      const mime=header.match(/:(.*?);/)[1];
+      const binary=atob(b64);
+      const arr=new Uint8Array(binary.length);
+      for(let i=0;i<binary.length;i++)arr[i]=binary.charCodeAt(i);
+      return new Blob([arr],{type:mime});
     };
 
     let originalUrl=null,annotatedUrl=null;
@@ -475,10 +484,10 @@ export default function App() {
         originalUrl=await uploadFile(originalFileRef.current,`${uid}/${ts}_original.${ext}`);
       }
       if(snapshotRef.current){
-        const blob=await fetch(snapshotRef.current).then(r=>r.blob());
+        const blob=dataURLtoBlob(snapshotRef.current);
         annotatedUrl=await uploadFile(blob,`${uid}/${ts}_annotated.jpg`);
       }
-    }catch(e){console.error("画像アップロードエラー:",e);alert("画像のアップロードに失敗しました");return;}
+    }catch(e){console.error("画像アップロードエラー:",e);alert("画像のアップロードに失敗しました\n"+e.message);return;}
 
     const{data,error}=await supabase.from("sessions").insert({
       user_id:uid,user_name:user,boat_class:cond.boatClass,sail_number:cond.sailNumber,
