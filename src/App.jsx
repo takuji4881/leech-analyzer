@@ -208,44 +208,62 @@ function LogModal({saved,onClose,onExport}) {
           const isOpen=expanded===s.id;
           return(
             <div key={s.id} style={{background:C.panel,border:`1px solid ${isOpen?C.accent:C.border}`,borderRadius:6,overflow:"hidden",transition:"border-color 0.2s"}}>
-              <div onClick={()=>hasImg&&setExpanded(isOpen?null:s.id)}
-                style={{display:"flex",gap:12,padding:"12px 14px",alignItems:"flex-start",cursor:hasImg?"pointer":"default",userSelect:"none"}}>
+              {/* 常に表示：コンパクト行 */}
+              <div onClick={()=>setExpanded(isOpen?null:s.id)}
+                style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",cursor:"pointer",userSelect:"none"}}>
                 {hasImg&&(
                   <img src={s.annotatedImageUrl||s.originalImageUrl}
-                    style={{width:88,height:88,objectFit:"cover",borderRadius:4,border:`1px solid ${C.border}`,flexShrink:0}} alt="sail"/>
+                    style={{width:52,height:52,objectFit:"cover",borderRadius:4,border:`1px solid ${C.border}`,flexShrink:0}} alt="sail"/>
                 )}
-                <div style={{flex:1,display:"flex",flexDirection:"column",gap:5,minWidth:0}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
-                    <div style={{minWidth:0}}>
-                      {s.user&&<span style={{fontSize:10,color:C.point,marginRight:7,letterSpacing:"0.08em"}}>{s.user}</span>}
-                      <span style={{fontSize:11,color:C.accent}}>
-                        {s.cond?.boatClass&&`${s.cond.boatClass} `}{s.cond?.sailNumber&&`#${s.cond.sailNumber}`}
-                        {!s.cond?.boatClass&&!s.cond?.sailNumber&&<span style={{color:C.textDim}}>—</span>}
-                      </span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:4}}>
+                    <div style={{fontSize:10,color:C.point,letterSpacing:"0.06em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      {s.cond?.date} {s.user&&`· ${s.user}`}
                     </div>
-                    <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}>
-                      <div style={{fontSize:9,color:C.textDim}}>{s.cond?.date}</div>
-                      {hasImg&&<div style={{fontSize:11,color:isOpen?C.accent:C.textDim}}>{isOpen?"▲":"▼"}</div>}
-                    </div>
+                    <div style={{fontSize:12,color:isOpen?C.accent:C.textDim,flexShrink:0}}>{isOpen?"▲":"▼"}</div>
                   </div>
-                  <div style={{display:"flex",gap:14}}>
-                    {[["DRAFT",`${s.metrics?.draftPosition}%`],["MAX",`${s.metrics?.maxDraft}%`],["TWIST",`${s.metrics?.twist}°`]].map(([l,v])=>(
-                      <div key={l}><div style={{fontSize:8,color:C.textDim}}>{l}</div><div style={{fontSize:16,fontWeight:700,color:C.accent}}>{v}</div></div>
+                  <div style={{display:"flex",gap:12,marginTop:3}}>
+                    {[["D",`${s.metrics?.draftPosition}%`],["M",`${s.metrics?.maxDraft}%`],["T",`${s.metrics?.twist}°`]].map(([l,v])=>(
+                      <div key={l} style={{display:"flex",gap:3,alignItems:"baseline"}}>
+                        <span style={{fontSize:8,color:C.textDim}}>{l}</span>
+                        <span style={{fontSize:13,fontWeight:700,color:C.accent}}>{v}</span>
+                      </div>
+                    ))}
+                    {s.cond?.windKnots&&<span style={{fontSize:10,color:C.textDim,marginLeft:4}}>🌬{s.cond.windKnots}</span>}
+                  </div>
+                </div>
+              </div>
+
+              {/* 展開時のみ：詳細 */}
+              {isOpen&&(
+                <div style={{borderTop:`1px solid ${C.border}`,padding:"12px 14px",display:"flex",flexDirection:"column",gap:8}}>
+                  {hasImg&&(
+                    <img src={s.annotatedImageUrl||s.originalImageUrl} onClick={()=>setExpanded(null)}
+                      style={{width:"100%",display:"block",maxHeight:400,objectFit:"contain",background:"#050a14",borderRadius:4,cursor:"pointer"}} alt="sail full"/>
+                  )}
+                  <div style={{display:"flex",gap:20}}>
+                    {[["DRAFT POS",`${s.metrics?.draftPosition}%`],["MAX DRAFT",`${s.metrics?.maxDraft}%`],["TWIST",`${s.metrics?.twist}°`]].map(([l,v])=>(
+                      <div key={l}><div style={{fontSize:8,color:C.textDim,letterSpacing:"0.1em"}}>{l}</div><div style={{fontSize:20,fontWeight:700,color:C.accent}}>{v}</div></div>
                     ))}
                   </div>
                   {(s.cond?.windKnots||s.cond?.windDir||s.cond?.windStability)&&(
-                    <div style={{fontSize:10,color:C.textDim}}>🌬 {[s.cond.windKnots&&`${s.cond.windKnots}kt`,s.cond.windDir,s.cond.windStability].filter(Boolean).join(" · ")}</div>
+                    <div style={{fontSize:11,color:C.textDim}}>🌬 {[s.cond.windKnots&&`${s.cond.windKnots}kt`,s.cond.windDir,s.cond.windStability].filter(Boolean).join(" · ")}</div>
                   )}
                   {(s.cond?.waveHeight||s.cond?.waveType)&&(
-                    <div style={{fontSize:10,color:C.textDim}}>🌊 {[s.cond.waveHeight,s.cond.waveType].filter(Boolean).join(" · ")}</div>
+                    <div style={{fontSize:11,color:C.textDim}}>🌊 {[s.cond.waveHeight,s.cond.waveType].filter(Boolean).join(" · ")}</div>
                   )}
-                  {s.cond?.location&&<div style={{fontSize:10,color:C.textDim}}>📍 {s.cond.location}</div>}
-                  {s.cond?.comment&&<div style={{fontSize:10,color:C.textDim,fontStyle:"italic",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>"{s.cond.comment}"</div>}
+                  {s.cond?.location&&<div style={{fontSize:11,color:C.textDim}}>📍 {s.cond.location}</div>}
+                  {(s.cond?.outhaul||s.cond?.cunningham||s.cond?.vang)&&(
+                    <div style={{fontSize:11,color:C.textDim}}>
+                      {[s.cond.outhaul&&`OUT:${s.cond.outhaul}`,s.cond.cunningham&&`CUN:${s.cond.cunningham}`,s.cond.vang&&`VNG:${s.cond.vang}`].filter(Boolean).join("  ")}
+                    </div>
+                  )}
+                  {s.cond?.comment&&(
+                    <div style={{fontSize:11,color:C.text,fontStyle:"italic",lineHeight:1.7,background:"rgba(255,255,255,0.03)",borderRadius:4,padding:"8px 10px",borderLeft:`2px solid ${C.accentDim}`}}>
+                      {s.cond.comment}
+                    </div>
+                  )}
                 </div>
-              </div>
-              {isOpen&&hasImg&&(
-                <img src={s.annotatedImageUrl||s.originalImageUrl} onClick={()=>setExpanded(null)}
-                  style={{width:"100%",display:"block",maxHeight:400,objectFit:"contain",background:"#050a14",cursor:"pointer"}} alt="sail full"/>
               )}
             </div>
           );
