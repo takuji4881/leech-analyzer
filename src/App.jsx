@@ -532,6 +532,13 @@ export default function App() {
     originalFileRef.current=null;
   };
 
+  const [isMobile,setIsMobile]=useState(window.innerWidth<640);
+  useEffect(()=>{
+    const h=()=>setIsMobile(window.innerWidth<640);
+    window.addEventListener("resize",h);
+    return()=>window.removeEventListener("resize",h);
+  },[]);
+
   const top=points.find(p=>p.pct===0)||null;
   const bot=points.find(p=>p.pct===100)||null;
   const missing=top&&bot?DIVISIONS.filter(pct=>pct!==0&&pct!==100&&!points.some(p=>p.pct===pct)):[];
@@ -620,7 +627,7 @@ export default function App() {
           )}
         </div>
 
-        <div style={{width:185,flexShrink:0,borderLeft:`1px solid ${C.border}`,background:C.panel,padding:13,display:"flex",flexDirection:"column",gap:13,overflowY:"auto"}}>
+        {!isMobile&&<div style={{width:185,flexShrink:0,borderLeft:`1px solid ${C.border}`,background:C.panel,padding:13,display:"flex",flexDirection:"column",gap:13,overflowY:"auto"}}>
           <div>
             <Label>STATUS</Label>
             <div style={{fontSize:10,letterSpacing:"0.1em",color:mode==="conditions"?C.point:C.accent}}>
@@ -672,7 +679,7 @@ export default function App() {
               </div>
             </>
           )}
-        </div>
+        </div>}
       </div>
 
       {showLog&&<LogModal saved={saved} onClose={()=>setShowLog(false)} onExport={()=>exportCSV(saved)}/>}
