@@ -477,11 +477,26 @@ export default function App() {
       return new Blob([arr],{type:mime});
     };
 
+    const compressImage=(file,maxDim=1920,quality=0.82)=>new Promise(resolve=>{
+      const img=new Image();
+      const url=URL.createObjectURL(file);
+      img.onload=()=>{
+        URL.revokeObjectURL(url);
+        const scale=Math.min(1,maxDim/Math.max(img.naturalWidth,img.naturalHeight));
+        const w=Math.round(img.naturalWidth*scale),h=Math.round(img.naturalHeight*scale);
+        const c=document.createElement("canvas");
+        c.width=w;c.height=h;
+        c.getContext("2d").drawImage(img,0,0,w,h);
+        c.toBlob(resolve,"image/jpeg",quality);
+      };
+      img.src=url;
+    });
+
     let originalUrl=null,annotatedUrl=null;
     try{
       if(originalFileRef.current){
-        const ext=originalFileRef.current.name.split(".").pop()||"jpg";
-        originalUrl=await uploadFile(originalFileRef.current,`${uid}/${ts}_original.${ext}`);
+        const compressed=await compressImage(originalFileRef.current);
+        originalUrl=await uploadFile(compressed,`${uid}/${ts}_original.jpg`);
       }
       if(snapshotRef.current){
         const blob=dataURLtoBlob(snapshotRef.current);
