@@ -201,46 +201,55 @@ function LogModal({saved,onClose,onExport}) {
       </div>
 
       {/* List */}
-      <div style={{flex:1,overflowY:"auto",padding:"12px 16px",display:"flex",flexDirection:"column",gap:10}}>
+      <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:"12px 16px",display:"flex",flexDirection:"column",gap:10}}>
         {filtered.length===0&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:40}}>条件に一致するセッションがありません</div>}
-        {filtered.map(s=>(
-          <div key={s.id} style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:6,overflow:"hidden"}}>
-            <div style={{display:"flex",gap:12,padding:"12px 14px",alignItems:"flex-start"}}>
-              {(s.annotatedImageUrl||s.originalImageUrl)&&(
-                <img src={s.annotatedImageUrl||s.originalImageUrl} onClick={()=>setExpanded(expanded===s.id?null:s.id)}
-                  style={{width:72,height:72,objectFit:"cover",borderRadius:4,border:`1px solid ${C.border}`,cursor:"pointer",flexShrink:0}} alt="sail"/>
-              )}
-              <div style={{flex:1,display:"flex",flexDirection:"column",gap:5,minWidth:0}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
-                  <div style={{minWidth:0}}>
-                    {s.user&&<span style={{fontSize:10,color:C.point,marginRight:7,letterSpacing:"0.08em"}}>{s.user}</span>}
-                    <span style={{fontSize:11,color:C.accent}}>
-                      {s.cond?.boatClass&&`${s.cond.boatClass} `}{s.cond?.sailNumber&&`#${s.cond.sailNumber}`}
-                      {!s.cond?.boatClass&&!s.cond?.sailNumber&&<span style={{color:C.textDim}}>—</span>}
-                    </span>
+        {filtered.map(s=>{
+          const hasImg=!!(s.annotatedImageUrl||s.originalImageUrl);
+          const isOpen=expanded===s.id;
+          return(
+            <div key={s.id} style={{background:C.panel,border:`1px solid ${isOpen?C.accent:C.border}`,borderRadius:6,overflow:"hidden",transition:"border-color 0.2s"}}>
+              <div onClick={()=>hasImg&&setExpanded(isOpen?null:s.id)}
+                style={{display:"flex",gap:12,padding:"12px 14px",alignItems:"flex-start",cursor:hasImg?"pointer":"default",userSelect:"none"}}>
+                {hasImg&&(
+                  <img src={s.annotatedImageUrl||s.originalImageUrl}
+                    style={{width:88,height:88,objectFit:"cover",borderRadius:4,border:`1px solid ${C.border}`,flexShrink:0}} alt="sail"/>
+                )}
+                <div style={{flex:1,display:"flex",flexDirection:"column",gap:5,minWidth:0}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                    <div style={{minWidth:0}}>
+                      {s.user&&<span style={{fontSize:10,color:C.point,marginRight:7,letterSpacing:"0.08em"}}>{s.user}</span>}
+                      <span style={{fontSize:11,color:C.accent}}>
+                        {s.cond?.boatClass&&`${s.cond.boatClass} `}{s.cond?.sailNumber&&`#${s.cond.sailNumber}`}
+                        {!s.cond?.boatClass&&!s.cond?.sailNumber&&<span style={{color:C.textDim}}>—</span>}
+                      </span>
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}>
+                      <div style={{fontSize:9,color:C.textDim}}>{s.cond?.date}</div>
+                      {hasImg&&<div style={{fontSize:11,color:isOpen?C.accent:C.textDim}}>{isOpen?"▲":"▼"}</div>}
+                    </div>
                   </div>
-                  <div style={{fontSize:9,color:C.textDim,flexShrink:0}}>{s.cond?.date}</div>
+                  <div style={{display:"flex",gap:14}}>
+                    {[["DRAFT",`${s.metrics?.draftPosition}%`],["MAX",`${s.metrics?.maxDraft}%`],["TWIST",`${s.metrics?.twist}°`]].map(([l,v])=>(
+                      <div key={l}><div style={{fontSize:8,color:C.textDim}}>{l}</div><div style={{fontSize:16,fontWeight:700,color:C.accent}}>{v}</div></div>
+                    ))}
+                  </div>
+                  {(s.cond?.windKnots||s.cond?.windDir||s.cond?.windStability)&&(
+                    <div style={{fontSize:10,color:C.textDim}}>🌬 {[s.cond.windKnots&&`${s.cond.windKnots}kt`,s.cond.windDir,s.cond.windStability].filter(Boolean).join(" · ")}</div>
+                  )}
+                  {(s.cond?.waveHeight||s.cond?.waveType)&&(
+                    <div style={{fontSize:10,color:C.textDim}}>🌊 {[s.cond.waveHeight,s.cond.waveType].filter(Boolean).join(" · ")}</div>
+                  )}
+                  {s.cond?.location&&<div style={{fontSize:10,color:C.textDim}}>📍 {s.cond.location}</div>}
+                  {s.cond?.comment&&<div style={{fontSize:10,color:C.textDim,fontStyle:"italic",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>"{s.cond.comment}"</div>}
                 </div>
-                <div style={{display:"flex",gap:14}}>
-                  {[["DRAFT",`${s.metrics?.draftPosition}%`],["MAX",`${s.metrics?.maxDraft}%`],["TWIST",`${s.metrics?.twist}°`]].map(([l,v])=>(
-                    <div key={l}><div style={{fontSize:8,color:C.textDim}}>{l}</div><div style={{fontSize:16,fontWeight:700,color:C.accent}}>{v}</div></div>
-                  ))}
-                </div>
-                {(s.cond?.windKnots||s.cond?.windDir||s.cond?.windStability)&&(
-                  <div style={{fontSize:10,color:C.textDim}}>🌬 {[s.cond.windKnots&&`${s.cond.windKnots}kt`,s.cond.windDir,s.cond.windStability].filter(Boolean).join(" · ")}</div>
-                )}
-                {(s.cond?.waveHeight||s.cond?.waveType)&&(
-                  <div style={{fontSize:10,color:C.textDim}}>🌊 {[s.cond.waveHeight,s.cond.waveType].filter(Boolean).join(" · ")}</div>
-                )}
-                {s.cond?.location&&<div style={{fontSize:10,color:C.textDim}}>📍 {s.cond.location}</div>}
-                {s.cond?.comment&&<div style={{fontSize:10,color:C.textDim,fontStyle:"italic",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>"{s.cond.comment}"</div>}
               </div>
+              {isOpen&&hasImg&&(
+                <img src={s.annotatedImageUrl||s.originalImageUrl} onClick={()=>setExpanded(null)}
+                  style={{width:"100%",display:"block",maxHeight:400,objectFit:"contain",background:"#050a14",cursor:"pointer"}} alt="sail full"/>
+              )}
             </div>
-            {expanded===s.id&&(s.annotatedImageUrl||s.originalImageUrl)&&(
-              <img src={s.annotatedImageUrl||s.originalImageUrl} style={{width:"100%",display:"block",maxHeight:360,objectFit:"contain",background:"#050a14"}} alt="sail full"/>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
