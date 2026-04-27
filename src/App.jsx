@@ -21,8 +21,6 @@ let C = THEMES.dark;
 
 const DIVISIONS = [0, 25, 50, 75, 100];
 const SNAP_THRESHOLD = 40;
-const LS_KEY = "leech_sessions";
-const LS_USER = "leech_username";
 
 function getGuideY(top, bot, pct) {
   return { x: top.x + (bot.x - top.x) * pct / 100, y: top.y + (bot.y - top.y) * pct / 100 };
@@ -56,8 +54,21 @@ function computeMetrics(pts) {
 const today = () => new Date().toISOString().slice(0,10);
 const EMPTY_COND = { boatClass:"", sailNumber:"", date:today(), location:"", windKnots:"", windDir:"", windStability:"", waveHeight:"", waveType:"", outhaul:"", cunningham:"", vang:"", comment:"" };
 
-function loadSessions() { try { return JSON.parse(localStorage.getItem(LS_KEY)) || []; } catch { return []; } }
-function saveSessions(arr) { try { localStorage.setItem(LS_KEY, JSON.stringify(arr)); } catch {} }
+function mapSession(s) {
+  return {
+    id: s.id,
+    originalImageUrl: s.original_image_url,
+    annotatedImageUrl: s.annotated_image_url,
+    user: s.user_name,
+    metrics: { draftPosition: s.draft_position, maxDraft: s.max_draft, twist: s.twist },
+    cond: {
+      boatClass: s.boat_class, sailNumber: s.sail_number, date: s.date, location: s.location,
+      windKnots: s.wind_knots, windDir: s.wind_dir, windStability: s.wind_stability,
+      waveHeight: s.wave_height, waveType: s.wave_type,
+      outhaul: s.outhaul, cunningham: s.cunningham, vang: s.vang, comment: s.comment,
+    },
+  };
+}
 
 function exportCSV(sessions) {
   const headers = ["id","date","user","boatClass","sailNumber","location","draftPosition","maxDraft","twist","windKnots","windDir","windStability","waveHeight","waveType","outhaul","cunningham","vang","comment"];
@@ -66,8 +77,9 @@ function exportCSV(sessions) {
     return `"${String(v).replace(/"/g,'""')}"`;
   }).join(","));
   const csv = [headers.join(","), ...rows].join("\n");
-  const dataUri = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
-  const a = document.createElement("a"); a.href=dataUri; a.download=`leech_log_${today()}.csv`;
+  const a = document.createElement("a");
+  a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
+  a.download = `leech_log_${today()}.csv`;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 
@@ -80,16 +92,250 @@ function Field({label,children}) {
 function TextIn({value,onChange,placeholder}) {
   return <input value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder||"—"} style={{background:"rgba(255,255,255,0.04)",border:`1px solid ${C.border}`,borderRadius:4,padding:"6px 9px",color:C.text,fontSize:11,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"}}/>;
 }
-function Btn({children,onClick,disabled,secondary,as,style:sx}){
-  const T=as||"button";
-  return <T onClick={onClick} disabled={disabled} style={{background:secondary?"transparent":disabled?"#1a2a3a":C.accent,color:secondary?C.textDim:disabled?C.textDim:C.bg,border:`1px solid ${secondary?C.border:disabled?"#1a2a3a":C.accent}`,padding:"6px 12px",fontSize:11,fontFamily:"inherit",letterSpacing:"0.1em",cursor:disabled?"not-allowed":"pointer",borderRadius:4,fontWeight:700,whiteSpace:"nowrap",...sx}}>{children}</T>;
+function Btn({children,onClick,disabled,secondary,style:sx}){
+  return <button onClick={onClick} disabled={disabled} style={{background:secondary?"transparent":disabled?"#1a2a3a":C.accent,color:secondary?C.textDim:disabled?C.textDim:C.bg,border:`1px solid ${secondary?C.border:disabled?"#1a2a3a":C.accent}`,padding:"6px 12px",fontSize:11,fontFamily:"inherit",letterSpacing:"0.1em",cursor:disabled?"not-allowed":"pointer",borderRadius:4,fontWeight:700,whiteSpace:"nowrap",...sx}}>{children}</button>;
 }
 function Label({children}){ return <div style={{fontSize:9,color:C.textDim,letterSpacing:"0.22em",marginBottom:6}}>{children}</div>; }
 function Metric({label,value,sub,active}){
   return <div><div style={{fontSize:9,color:C.textDim,letterSpacing:"0.18em",marginBottom:2}}>{label}</div><div style={{fontSize:20,fontWeight:700,color:active?C.accent:C.border,lineHeight:1,transition:"color 0.3s"}}>{value}</div><div style={{fontSize:9,color:C.textDim,marginTop:2}}>{sub}</div></div>;
 }
 
-function ConditionsForm({cond,setCond,user,setUser,onDone,metrics}) {
+function AuthScreen({onAuth}){
+  const [isLogin,setIsLogin]=useState(true);
+  const [email,setEmail]=useState("");
+  const [password,setPassword]=useState("");
+  const [err,setErr]=useState("");
+  const [msg,setMsg]=useState("");
+  const [loading,setLoading]=useState(false);
+
+  const handle=async()=>{
+    setErr("");setMsg("");setLoading(true);
+    const{data,error}=isLogin
+      ?await supabase.auth.signInWithPassword({email,password})
+      :await supabase.auth.signUp({email,password});
+    setLoading(false);
+    if(error){setErr(error.message);return;}
+    if(!isLogin&&!data.session){setMsg("確認メールを送信しました。メールを確認してからログインしてください。");return;}
+    onAuth(data.session?.user??data.user);
+  };
+
+  return(
+    <div style={{height:"100vh",background:C.bg,color:C.text,fontFamily:"'DM Mono','Courier New',monospace",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
+      <div style={{marginBottom:28,textAlign:"center"}}>
+        <svg width="32" height="32" viewBox="0 0 28 28" fill="none" style={{marginBottom:8}}>
+          <path d="M14 2 L26 24 L14 20 L2 24 Z" stroke={C.accent} strokeWidth="1.8" fill="none"/>
+          <path d="M14 2 L14 20" stroke={C.accent} strokeWidth="1.2" opacity="0.5"/>
+        </svg>
+        <div style={{fontSize:14,fontWeight:700,letterSpacing:"0.14em",color:C.accent}}>LEECH ANALYZER</div>
+        <div style={{fontSize:9,color:C.textDim,letterSpacing:"0.2em",marginTop:2}}>SAIL SHAPE LOGGER</div>
+      </div>
+      <div style={{width:"100%",maxWidth:340,background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:24,display:"flex",flexDirection:"column",gap:16}}>
+        <div style={{display:"flex",borderRadius:4,overflow:"hidden",border:`1px solid ${C.border}`}}>
+          {["ログイン","新規登録"].map((t,i)=>(
+            <button key={t} onClick={()=>{setIsLogin(i===0);setErr("");setMsg("");}}
+              style={{flex:1,padding:"8px",fontSize:10,fontFamily:"inherit",letterSpacing:"0.1em",border:"none",background:(isLogin?i===0:i===1)?"rgba(0,200,255,0.15)":"transparent",color:(isLogin?i===0:i===1)?C.accent:C.textDim,cursor:"pointer"}}>
+              {t}
+            </button>
+          ))}
+        </div>
+        <Field label="メールアドレス"><TextIn value={email} onChange={setEmail} placeholder="sailor@example.com"/></Field>
+        <Field label="パスワード">
+          <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="8文字以上"
+            style={{background:"rgba(255,255,255,0.04)",border:`1px solid ${C.border}`,borderRadius:4,padding:"6px 9px",color:C.text,fontSize:11,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"}}/>
+        </Field>
+        {err&&<div style={{fontSize:10,color:"#ff6b6b"}}>{err}</div>}
+        {msg&&<div style={{fontSize:10,color:C.point,lineHeight:1.6}}>{msg}</div>}
+        <button onClick={handle} disabled={loading||!email||!password}
+          style={{background:loading||!email||!password?"#1a2a3a":C.accent,color:loading||!email||!password?C.textDim:C.bg,border:"none",borderRadius:4,padding:"10px",fontSize:11,fontFamily:"inherit",letterSpacing:"0.12em",fontWeight:700,cursor:loading||!email||!password?"not-allowed":"pointer"}}>
+          {loading?"処理中...":(isLogin?"LOGIN →":"SIGN UP →")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SetupScreen({onDone}){
+  const [username,setUsername]=useState("");
+  const [loading,setLoading]=useState(false);
+  const [err,setErr]=useState("");
+
+  const handle=async()=>{
+    if(!username.trim())return;
+    setLoading(true);setErr("");
+    const{data:{user}}=await supabase.auth.getUser();
+    const{error}=await supabase.from("profiles").insert({id:user.id,username:username.trim()});
+    setLoading(false);
+    if(error){
+      setErr(error.code==="23505"?"そのユーザー名はすでに使われています":error.message);
+      return;
+    }
+    onDone(username.trim());
+  };
+
+  return(
+    <div style={{height:"100vh",background:C.bg,color:C.text,fontFamily:"'DM Mono','Courier New',monospace",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
+      <div style={{marginBottom:28,textAlign:"center"}}>
+        <svg width="32" height="32" viewBox="0 0 28 28" fill="none" style={{marginBottom:8}}>
+          <path d="M14 2 L26 24 L14 20 L2 24 Z" stroke={C.accent} strokeWidth="1.8" fill="none"/>
+          <path d="M14 2 L14 20" stroke={C.accent} strokeWidth="1.2" opacity="0.5"/>
+        </svg>
+        <div style={{fontSize:14,fontWeight:700,letterSpacing:"0.14em",color:C.accent}}>LEECH ANALYZER</div>
+        <div style={{fontSize:9,color:C.textDim,letterSpacing:"0.2em",marginTop:2}}>SETUP</div>
+      </div>
+      <div style={{width:"100%",maxWidth:340,background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:24,display:"flex",flexDirection:"column",gap:16}}>
+        <div style={{fontSize:11,color:C.text,lineHeight:1.8}}>
+          ユーザー名を設定してください。<br/>フィードに表示される名前です。
+        </div>
+        <Field label="ユーザー名"><TextIn value={username} onChange={setUsername} placeholder="例: takuji"/></Field>
+        {err&&<div style={{fontSize:10,color:"#ff6b6b"}}>{err}</div>}
+        <button onClick={handle} disabled={loading||!username.trim()}
+          style={{background:loading||!username.trim()?"#1a2a3a":C.accent,color:loading||!username.trim()?C.textDim:C.bg,border:"none",borderRadius:4,padding:"10px",fontSize:11,fontFamily:"inherit",letterSpacing:"0.12em",fontWeight:700,cursor:loading||!username.trim()?"not-allowed":"pointer"}}>
+          {loading?"保存中...":"はじめる →"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SessionCard({s}){
+  const imgUrl=s.annotatedImageUrl||s.originalImageUrl;
+  return(
+    <div style={{borderBottom:`1px solid ${C.border}`}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 16px"}}>
+        <div style={{fontSize:12,fontWeight:700,color:C.point,letterSpacing:"0.06em"}}>{s.user||"—"}</div>
+        <div style={{fontSize:10,color:C.textDim}}>{s.cond?.date}{s.cond?.location&&` · ${s.cond.location}`}</div>
+      </div>
+      {imgUrl&&<img src={imgUrl} style={{width:"100%",display:"block",maxHeight:400,objectFit:"contain",background:C.canvas}} alt="sail"/>}
+      <div style={{padding:"12px 16px",display:"flex",flexDirection:"column",gap:8}}>
+        <div style={{display:"flex",gap:24}}>
+          {[["DRAFT",`${s.metrics?.draftPosition}%`],["MAX",`${s.metrics?.maxDraft}%`],["TWIST",`${s.metrics?.twist}°`]].map(([l,v])=>(
+            <div key={l}><div style={{fontSize:8,color:C.textDim,letterSpacing:"0.15em"}}>{l}</div><div style={{fontSize:22,fontWeight:700,color:C.accent,lineHeight:1.1}}>{v}</div></div>
+          ))}
+        </div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+          {s.cond?.windKnots&&<span style={{fontSize:10,color:C.textDim}}>🌬 {s.cond.windKnots}kt{s.cond.windDir&&` · ${s.cond.windDir}`}{s.cond.windStability&&` · ${s.cond.windStability}`}</span>}
+          {(s.cond?.waveHeight||s.cond?.waveType)&&<span style={{fontSize:10,color:C.textDim}}>🌊 {[s.cond.waveHeight,s.cond.waveType].filter(Boolean).join(" · ")}</span>}
+        </div>
+        {(s.cond?.outhaul||s.cond?.cunningham||s.cond?.vang)&&(
+          <div style={{fontSize:10,color:C.textDim}}>
+            {[s.cond.outhaul&&`アウト:${s.cond.outhaul}`,s.cond.cunningham&&`カニ:${s.cond.cunningham}`,s.cond.vang&&`バング:${s.cond.vang}`].filter(Boolean).join("  ·  ")}
+          </div>
+        )}
+        {s.cond?.comment&&(
+          <div style={{fontSize:12,color:C.text,lineHeight:1.7,borderLeft:`2px solid ${C.accentDim}`,paddingLeft:10,marginTop:2}}>
+            {s.cond.comment}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FeedPage({sessions,loading}){
+  const [search,setSearch]=useState("");
+  const [showFilter,setShowFilter]=useState(false);
+  const [fWind,setFWind]=useState("");
+  const [fWave,setFWave]=useState("");
+
+  const winds=[...new Set(sessions.map(s=>s.cond?.windKnots).filter(Boolean))];
+  const waves=[...new Set(sessions.map(s=>s.cond?.waveHeight).filter(Boolean))];
+  const hasFilter=search||fWind||fWave;
+
+  const filtered=sessions.filter(s=>{
+    const q=search.toLowerCase();
+    const matchQ=!q||[s.user,s.cond?.boatClass,s.cond?.location,s.cond?.comment].some(v=>v?.toLowerCase().includes(q));
+    return matchQ&&(!fWind||s.cond?.windKnots===fWind)&&(!fWave||s.cond?.waveHeight===fWave);
+  });
+
+  return(
+    <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
+      <div style={{padding:"8px 12px",borderBottom:`1px solid ${C.border}`,flexShrink:0,display:"flex",gap:8,alignItems:"center"}}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="検索..."
+          style={{flex:1,background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,borderRadius:20,padding:"6px 12px",color:C.text,fontSize:11,fontFamily:"inherit",outline:"none"}}/>
+        <button onClick={()=>setShowFilter(f=>!f)}
+          style={{background:hasFilter?"rgba(0,200,255,0.15)":"transparent",border:`1px solid ${hasFilter?C.accent:C.border}`,borderRadius:20,padding:"5px 12px",fontSize:10,color:hasFilter?C.accent:C.textDim,fontFamily:"inherit",cursor:"pointer"}}>
+          フィルター
+        </button>
+      </div>
+      {showFilter&&(
+        <div style={{padding:"8px 12px",borderBottom:`1px solid ${C.border}`,flexShrink:0,display:"flex",flexWrap:"wrap",gap:6,alignItems:"center"}}>
+          {winds.map(w=><Chip key={w} label={w} active={fWind===w} onClick={()=>setFWind(f=>f===w?"":w)}/>)}
+          {waves.map(w=><Chip key={w} label={w} active={fWave===w} onClick={()=>setFWave(f=>f===w?"":w)}/>)}
+          {hasFilter&&<button onClick={()=>{setSearch("");setFWind("");setFWave("");}}
+            style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:3,padding:"3px 10px",color:C.textDim,fontSize:9,fontFamily:"inherit",cursor:"pointer"}}>
+            リセット ×
+          </button>}
+        </div>
+      )}
+      <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+        {loading&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:60}}>読み込み中...</div>}
+        {!loading&&filtered.length===0&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:60}}>まだ投稿がありません</div>}
+        {filtered.map(s=><SessionCard key={s.id} s={s}/>)}
+      </div>
+    </div>
+  );
+}
+
+function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout,onExport}){
+  const [editing,setEditing]=useState(false);
+  const [newName,setNewName]=useState(username);
+  const [saving,setSaving]=useState(false);
+  const [err,setErr]=useState("");
+
+  const handleSaveName=async()=>{
+    if(!newName.trim())return;
+    setSaving(true);setErr("");
+    const{data:{user}}=await supabase.auth.getUser();
+    const{error}=await supabase.from("profiles").update({username:newName.trim()}).eq("id",user.id);
+    setSaving(false);
+    if(error){setErr(error.code==="23505"?"そのユーザー名はすでに使われています":error.message);return;}
+    onUsernameChange(newName.trim());
+    setEditing(false);
+  };
+
+  return(
+    <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0,overflowY:"auto"}}>
+      <div style={{padding:"20px 16px",borderBottom:`1px solid ${C.border}`,background:C.panel,flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:16}}>
+          <div style={{width:52,height:52,borderRadius:"50%",background:`linear-gradient(135deg,${C.accent},${C.point})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:700,color:C.bg,flexShrink:0}}>
+            {username?.[0]?.toUpperCase()||"?"}
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            {!editing?(
+              <>
+                <div style={{fontSize:15,fontWeight:700,color:C.text}}>{username}</div>
+                <div style={{fontSize:10,color:C.textDim,marginTop:2}}>{sessions.length} セッション</div>
+              </>
+            ):(
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                <input value={newName} onChange={e=>setNewName(e.target.value)}
+                  style={{background:"rgba(255,255,255,0.05)",border:`1px solid ${C.accent}`,borderRadius:4,padding:"6px 10px",color:C.text,fontSize:12,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"}}/>
+                <div style={{display:"flex",gap:8}}>
+                  <Btn onClick={handleSaveName} disabled={saving||!newName.trim()} style={{fontSize:10}}>{saving?"保存中":"保存"}</Btn>
+                  <Btn onClick={()=>{setEditing(false);setNewName(username);setErr("");}} secondary style={{fontSize:10}}>キャンセル</Btn>
+                </div>
+              </div>
+            )}
+            {err&&<div style={{fontSize:9,color:"#ff6b6b",marginTop:4}}>{err}</div>}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {!editing&&<Btn onClick={()=>setEditing(true)} secondary style={{fontSize:10}}>名前変更</Btn>}
+          <Btn onClick={onThemeToggle} secondary style={{fontSize:10}}>{theme==="dark"?"☀️ ライト":"🌙 ダーク"}</Btn>
+          <Btn onClick={onExport} secondary style={{fontSize:10}}>CSV</Btn>
+          <Btn onClick={onLogout} secondary style={{fontSize:10,color:"#ff6b6b",borderColor:"rgba(255,107,107,0.5)"}}>ログアウト</Btn>
+        </div>
+      </div>
+      <div style={{padding:"10px 16px",borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+        <div style={{fontSize:9,color:C.textDim,letterSpacing:"0.2em"}}>MY SESSIONS</div>
+      </div>
+      {sessions.length===0&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:40}}>まだ投稿がありません</div>}
+      {sessions.map(s=><SessionCard key={s.id} s={s}/>)}
+    </div>
+  );
+}
+
+function ConditionsForm({cond,setCond,onDone,metrics}){
   const set = k => v => setCond(prev=>({...prev,[k]:v}));
   const toggle = (k,v) => setCond(prev=>({...prev,[k]:prev[k]===v?"":v}));
   return (
@@ -101,10 +347,6 @@ function ConditionsForm({cond,setCond,user,setUser,onDone,metrics}) {
           ))}
         </div>
       )}
-      <Field label="ユーザー名（あなたの名前）">
-        <TextIn value={user} onChange={setUser} placeholder="例: 太郎"/>
-      </Field>
-      <div style={{borderTop:`1px solid ${C.border}`}}/>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <Field label="艇種"><TextIn value={cond.boatClass} onChange={set("boatClass")} placeholder="470, Laser..."/></Field>
         <Field label="艇番"><TextIn value={cond.sailNumber} onChange={set("sailNumber")} placeholder="1234"/></Field>
@@ -158,174 +400,32 @@ function ConditionsForm({cond,setCond,user,setUser,onDone,metrics}) {
   );
 }
 
-function LogModal({saved,onClose,onExport}) {
-  const [search,setSearch]=useState("");
-  const [fWind,setFWind]=useState("");
-  const [fWave,setFWave]=useState("");
-  const [showFilter,setShowFilter]=useState(false);
-
-  const winds=[...new Set(saved.map(s=>s.cond?.windKnots).filter(Boolean))];
-  const waves=[...new Set(saved.map(s=>s.cond?.waveHeight).filter(Boolean))];
-
-  const filtered=[...saved].reverse().filter(s=>{
-    const q=search.toLowerCase();
-    const matchQ=!q||[s.user,s.cond?.boatClass,s.cond?.sailNumber,s.cond?.location,s.cond?.windDir,s.cond?.comment].some(v=>v?.toLowerCase().includes(q));
-    return matchQ&&(!fWind||s.cond?.windKnots===fWind)&&(!fWave||s.cond?.waveHeight===fWave);
-  });
-
-  const hasFilter=search||fWind||fWave;
-
-  return (
-    <div style={{position:"fixed",inset:0,background:C.bg,zIndex:100,display:"flex",flexDirection:"column",maxWidth:600,margin:"0 auto"}}>
-      {/* ヘッダー */}
-      <div style={{padding:"12px 16px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8,flexShrink:0,background:C.panel}}>
-        <div style={{color:C.accent,fontSize:13,fontWeight:700,letterSpacing:"0.12em"}}>SESSION LOG</div>
-        <div style={{fontSize:10,color:C.textDim}}>{filtered.length} / {saved.length}</div>
-        <div style={{marginLeft:"auto",display:"flex",gap:8}}>
-          <Btn onClick={()=>setShowFilter(f=>!f)} secondary style={{fontSize:10}}>{hasFilter?"🔍 ON":"🔍"}</Btn>
-          <Btn onClick={onExport} secondary style={{fontSize:10}}>CSV</Btn>
-          <Btn onClick={onClose} secondary style={{fontSize:10}}>✕</Btn>
-        </div>
-      </div>
-
-      {/* 検索・フィルター（折りたたみ） */}
-      {showFilter&&(
-        <div style={{padding:"10px 16px",borderBottom:`1px solid ${C.border}`,display:"flex",flexDirection:"column",gap:8,flexShrink:0,background:"rgba(15,23,41,0.95)"}}>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 場所・コメントなどで検索..."
-            style={{background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,borderRadius:4,padding:"7px 11px",color:C.text,fontSize:11,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"}}/>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-            {winds.length>0&&<><span style={{fontSize:9,color:C.textDim}}>風速</span>
-              {winds.map(w=><Chip key={w} label={w} active={fWind===w} onClick={()=>setFWind(f=>f===w?"":w)}/>)}</>}
-            {waves.length>0&&<><span style={{fontSize:9,color:C.textDim,marginLeft:4}}>波</span>
-              {waves.map(w=><Chip key={w} label={w} active={fWave===w} onClick={()=>setFWave(f=>f===w?"":w)}/>)}</>}
-          </div>
-          {hasFilter&&<button onClick={()=>{setSearch("");setFWind("");setFWave("");}}
-            style={{alignSelf:"flex-start",background:"transparent",border:`1px solid ${C.border}`,borderRadius:3,padding:"2px 10px",color:C.textDim,fontSize:9,fontFamily:"inherit",cursor:"pointer"}}>
-            リセット ×
-          </button>}
-        </div>
-      )}
-
-      {/* フィード */}
-      <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
-        {filtered.length===0&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:60}}>条件に一致するセッションがありません</div>}
-        {filtered.map(s=>{
-          const imgUrl=s.annotatedImageUrl||s.originalImageUrl;
-          return(
-            <div key={s.id} style={{borderBottom:`1px solid ${C.border}`}}>
-              {/* ユーザー・日付 */}
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 16px"}}>
-                <div style={{fontSize:12,fontWeight:700,color:C.point,letterSpacing:"0.06em"}}>{s.user||"—"}</div>
-                <div style={{fontSize:10,color:C.textDim}}>{s.cond?.date} {s.cond?.location&&`· ${s.cond.location}`}</div>
-              </div>
-              {/* 画像フル幅 */}
-              {imgUrl&&<img src={imgUrl} style={{width:"100%",display:"block",maxHeight:360,objectFit:"contain",background:C.canvas}} alt="sail"/>}
-              {/* メトリクス */}
-              <div style={{padding:"12px 16px",display:"flex",flexDirection:"column",gap:8}}>
-                <div style={{display:"flex",gap:24}}>
-                  {[["DRAFT",`${s.metrics?.draftPosition}%`],["MAX",`${s.metrics?.maxDraft}%`],["TWIST",`${s.metrics?.twist}°`]].map(([l,v])=>(
-                    <div key={l}><div style={{fontSize:8,color:C.textDim,letterSpacing:"0.15em"}}>{l}</div><div style={{fontSize:22,fontWeight:700,color:C.accent,lineHeight:1.1}}>{v}</div></div>
-                  ))}
-                </div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                  {s.cond?.windKnots&&<span style={{fontSize:10,color:C.textDim}}>🌬 {s.cond.windKnots}kt{s.cond.windDir&&` · ${s.cond.windDir}`}{s.cond.windStability&&` · ${s.cond.windStability}`}</span>}
-                  {(s.cond?.waveHeight||s.cond?.waveType)&&<span style={{fontSize:10,color:C.textDim}}>🌊 {[s.cond.waveHeight,s.cond.waveType].filter(Boolean).join(" · ")}</span>}
-                </div>
-                {(s.cond?.outhaul||s.cond?.cunningham||s.cond?.vang)&&(
-                  <div style={{fontSize:10,color:C.textDim}}>
-                    {[s.cond.outhaul&&`アウト:${s.cond.outhaul}`,s.cond.cunningham&&`カニ:${s.cond.cunningham}`,s.cond.vang&&`バング:${s.cond.vang}`].filter(Boolean).join("  ·  ")}
-                  </div>
-                )}
-                {s.cond?.comment&&(
-                  <div style={{fontSize:12,color:C.text,lineHeight:1.7,borderLeft:`2px solid ${C.accentDim}`,paddingLeft:10,marginTop:2}}>
-                    {s.cond.comment}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function AuthScreen({onAuth}){
-  const [isLogin,setIsLogin]=useState(true);
-  const [email,setEmail]=useState("");
-  const [password,setPassword]=useState("");
-  const [err,setErr]=useState("");
-  const [msg,setMsg]=useState("");
-  const [loading,setLoading]=useState(false);
-
-  const handle=async()=>{
-    setErr("");setMsg("");setLoading(true);
-    const{data,error}=isLogin
-      ?await supabase.auth.signInWithPassword({email,password})
-      :await supabase.auth.signUp({email,password});
-    setLoading(false);
-    if(error){setErr(error.message);return;}
-    if(!isLogin&&!data.session){setMsg("確認メールを送信しました。メールを確認してからログインしてください。");return;}
-    onAuth(data.session?.user??data.user);
-  };
-
-  return(
-    <div style={{height:"100vh",background:C.bg,color:C.text,fontFamily:"'DM Mono','Courier New',monospace",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
-      <div style={{marginBottom:28,textAlign:"center"}}>
-        <svg width="32" height="32" viewBox="0 0 28 28" fill="none" style={{marginBottom:8}}>
-          <path d="M14 2 L26 24 L14 20 L2 24 Z" stroke={C.accent} strokeWidth="1.8" fill="none"/>
-          <path d="M14 2 L14 20" stroke={C.accent} strokeWidth="1.2" opacity="0.5"/>
-        </svg>
-        <div style={{fontSize:14,fontWeight:700,letterSpacing:"0.14em",color:C.accent}}>LEECH ANALYZER</div>
-        <div style={{fontSize:9,color:C.textDim,letterSpacing:"0.2em",marginTop:2}}>SAIL SHAPE LOGGER</div>
-      </div>
-      <div style={{width:"100%",maxWidth:340,background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:24,display:"flex",flexDirection:"column",gap:16}}>
-        <div style={{display:"flex",borderRadius:4,overflow:"hidden",border:`1px solid ${C.border}`}}>
-          {["ログイン","新規登録"].map((t,i)=>(
-            <button key={t} onClick={()=>{setIsLogin(i===0);setErr("");setMsg("");}}
-              style={{flex:1,padding:"8px",fontSize:10,fontFamily:"inherit",letterSpacing:"0.1em",border:"none",background:(isLogin?i===0:i===1)?"rgba(0,200,255,0.15)":"transparent",color:(isLogin?i===0:i===1)?C.accent:C.textDim,cursor:"pointer"}}>
-              {t}
-            </button>
-          ))}
-        </div>
-        <Field label="メールアドレス">
-          <TextIn value={email} onChange={setEmail} placeholder="sailor@example.com"/>
-        </Field>
-        <Field label="パスワード">
-          <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="8文字以上"
-            style={{background:"rgba(255,255,255,0.04)",border:`1px solid ${C.border}`,borderRadius:4,padding:"6px 9px",color:C.text,fontSize:11,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"}}/>
-        </Field>
-        {err&&<div style={{fontSize:10,color:"#ff6b6b"}}>{err}</div>}
-        {msg&&<div style={{fontSize:10,color:C.point,lineHeight:1.6}}>{msg}</div>}
-        <button onClick={handle} disabled={loading||!email||!password}
-          style={{background:loading||!email||!password?"#1a2a3a":C.accent,color:loading||!email||!password?C.textDim:C.bg,border:"none",borderRadius:4,padding:"10px",fontSize:11,fontFamily:"inherit",letterSpacing:"0.12em",fontWeight:700,cursor:loading||!email||!password?"not-allowed":"pointer"}}>
-          {loading?"処理中...":(isLogin?"LOGIN →":"SIGN UP →")}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export default function App() {
+  const [page,setPage]=useState("feed");
   const [imgObj,setImgObj]=useState(null);
   const [points,setPoints]=useState([]);
   const [metrics,setMetrics]=useState(null);
   const [mode,setMode]=useState("upload");
   const [snapHint,setSnapHint]=useState(null);
   const [cond,setCond]=useState(EMPTY_COND);
-  const [user,setUser]=useState(()=>localStorage.getItem(LS_USER)||"");
-  const [saved,setSaved]=useState([]);
-  const [showLog,setShowLog]=useState(false);
+  const [feedSessions,setFeedSessions]=useState([]);
+  const [mySessions,setMySessions]=useState([]);
+  const [feedLoading,setFeedLoading]=useState(true);
   const [authUser,setAuthUser]=useState(null);
   const [authReady,setAuthReady]=useState(false);
+  const [profileUsername,setProfileUsername]=useState(null);
+  const [profileLoading,setProfileLoading]=useState(true);
   const [theme,setTheme]=useState(()=>localStorage.getItem("leech_theme")||"dark");
+  const [isMobile,setIsMobile]=useState(window.innerWidth<640);
   C=THEMES[theme];
+
   const canvasRef=useRef(null);
   const wrapperRef=useRef(null);
   const snapshotRef=useRef(null);
   const originalFileRef=useRef(null);
   const stateRef=useRef({points:[],mode:"upload",imgObj:null,snapHint:null});
   useEffect(()=>{stateRef.current={points,mode,imgObj,snapHint};},[points,mode,imgObj,snapHint]);
+
   useEffect(()=>{
     supabase.auth.getSession().then(({data:{session}})=>{
       setAuthUser(session?.user??null);
@@ -337,34 +437,50 @@ export default function App() {
     return()=>subscription.unsubscribe();
   },[]);
 
-  useEffect(()=>{localStorage.setItem(LS_USER,user);},[user]);
   useEffect(()=>{localStorage.setItem("leech_theme",theme);draw();},[theme]);
+
+  useEffect(()=>{
+    const h=()=>setIsMobile(window.innerWidth<640);
+    window.addEventListener("resize",h);
+    return()=>window.removeEventListener("resize",h);
+  },[]);
+
+  useEffect(()=>{
+    if(!authUser){setProfileUsername(null);setProfileLoading(false);return;}
+    setProfileLoading(true);
+    supabase.from("profiles").select("username").eq("id",authUser.id).single()
+      .then(({data})=>{
+        setProfileUsername(data?.username||null);
+        setProfileLoading(false);
+      });
+  },[authUser]);
+
   useEffect(()=>{
     if(!authUser)return;
-    const fetchSessions=async()=>{
-      const{data,error}=await supabase.from("sessions").select("*").eq("user_id",authUser.id).order("created_at",{ascending:false});
-      if(!error&&data){
-        setSaved(data.map(s=>({
-          id:s.id,originalImageUrl:s.original_image_url,annotatedImageUrl:s.annotated_image_url,user:s.user_name,
-          metrics:{draftPosition:s.draft_position,maxDraft:s.max_draft,twist:s.twist},
-          cond:{boatClass:s.boat_class,sailNumber:s.sail_number,date:s.date,location:s.location,
-            windKnots:s.wind_knots,windDir:s.wind_dir,windStability:s.wind_stability,
-            waveHeight:s.wave_height,waveType:s.wave_type,outhaul:s.outhaul,
-            cunningham:s.cunningham,vang:s.vang,comment:s.comment},
-        })));
-      }
-    };
-    fetchSessions();
+    setFeedLoading(true);
+    supabase.from("sessions").select("*").order("created_at",{ascending:false})
+      .then(({data,error})=>{
+        if(!error&&data)setFeedSessions(data.map(mapSession));
+        setFeedLoading(false);
+      });
+  },[authUser]);
+
+  useEffect(()=>{
+    if(!authUser)return;
+    supabase.from("sessions").select("*").eq("user_id",authUser.id).order("created_at",{ascending:false})
+      .then(({data,error})=>{
+        if(!error&&data)setMySessions(data.map(mapSession));
+      });
   },[authUser]);
 
   const draw=useCallback(()=>{
     const canvas=canvasRef.current,wrapper=wrapperRef.current;
-    if(!canvas||!wrapper) return;
-    const {imgObj:img,points:pts,snapHint:hint}=stateRef.current;
-    if(!img) return;
+    if(!canvas||!wrapper)return;
+    const{imgObj:img,points:pts,snapHint:hint}=stateRef.current;
+    if(!img)return;
     const dpr=window.devicePixelRatio||1;
     const W=wrapper.offsetWidth,H=wrapper.offsetHeight;
-    if(!W||!H) return;
+    if(!W||!H)return;
     if(canvas.width!==Math.round(W*dpr)||canvas.height!==Math.round(H*dpr)){
       canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);
       canvas.getContext("2d").setTransform(dpr,0,0,dpr,0,0);
@@ -453,7 +569,11 @@ export default function App() {
     if(!file)return;
     originalFileRef.current=file;
     const reader=new FileReader();
-    reader.onload=ev=>{const img=new Image();img.onload=()=>{setImgObj(img);setPoints([]);setMetrics(null);setMode("setTop");setCond(prev=>({...prev,date:today()}));};img.src=ev.target.result;};
+    reader.onload=ev=>{
+      const img=new Image();
+      img.onload=()=>{setImgObj(img);setPoints([]);setMetrics(null);setMode("setTop");setCond(prev=>({...prev,date:today()}));};
+      img.src=ev.target.result;
+    };
     reader.readAsDataURL(file);
   };
 
@@ -474,7 +594,6 @@ export default function App() {
       if(error)throw error;
       return supabase.storage.from("sail-images").getPublicUrl(path).data.publicUrl;
     };
-
     const dataURLtoBlob=dataURL=>{
       const[header,b64]=dataURL.split(",");
       const mime=header.match(/:(.*?);/)[1];
@@ -483,7 +602,6 @@ export default function App() {
       for(let i=0;i<binary.length;i++)arr[i]=binary.charCodeAt(i);
       return new Blob([arr],{type:mime});
     };
-
     const compressImage=(file,maxDim=1920,quality=0.82)=>new Promise(resolve=>{
       const img=new Image();
       const url=URL.createObjectURL(file);
@@ -512,39 +630,26 @@ export default function App() {
     }catch(e){console.error("画像アップロードエラー:",e);alert("画像のアップロードに失敗しました\n"+e.message);return;}
 
     const{data,error}=await supabase.from("sessions").insert({
-      user_id:uid,user_name:user,boat_class:cond.boatClass,sail_number:cond.sailNumber,
-      date:cond.date,location:cond.location,
-      draft_position:metrics.draftPosition,max_draft:metrics.maxDraft,twist:metrics.twist,
-      wind_knots:cond.windKnots,wind_dir:cond.windDir,wind_stability:cond.windStability,
-      wave_height:cond.waveHeight,wave_type:cond.waveType,
-      outhaul:cond.outhaul,cunningham:cond.cunningham,vang:cond.vang,
+      user_id:uid, user_name:profileUsername,
+      boat_class:cond.boatClass, sail_number:cond.sailNumber,
+      date:cond.date, location:cond.location,
+      draft_position:metrics.draftPosition, max_draft:metrics.maxDraft, twist:metrics.twist,
+      wind_knots:cond.windKnots, wind_dir:cond.windDir, wind_stability:cond.windStability,
+      wave_height:cond.waveHeight, wave_type:cond.waveType,
+      outhaul:cond.outhaul, cunningham:cond.cunningham, vang:cond.vang,
       comment:cond.comment,
       original_image_url:originalUrl,
       annotated_image_url:annotatedUrl,
     }).select().single();
     if(error){console.error("保存エラー:",error);alert("保存に失敗しました");return;}
-    if(user)localStorage.setItem(LS_USER,user);
-    setSaved(prev=>[{
-      id:data.id,
-      originalImageUrl:data.original_image_url,
-      annotatedImageUrl:data.annotated_image_url,
-      user:data.user_name,
-      metrics:{draftPosition:data.draft_position,maxDraft:data.max_draft,twist:data.twist},
-      cond:{boatClass:data.boat_class,sailNumber:data.sail_number,date:data.date,location:data.location,
-        windKnots:data.wind_knots,windDir:data.wind_dir,windStability:data.wind_stability,
-        waveHeight:data.wave_height,waveType:data.wave_type,outhaul:data.outhaul,
-        cunningham:data.cunningham,vang:data.vang,comment:data.comment},
-    },...prev]);
+
+    const newSession=mapSession(data);
+    setFeedSessions(prev=>[newSession,...prev]);
+    setMySessions(prev=>[newSession,...prev]);
     setMode("upload");setImgObj(null);setPoints([]);setMetrics(null);setCond(EMPTY_COND);
     originalFileRef.current=null;
+    setPage("feed");
   };
-
-  const [isMobile,setIsMobile]=useState(window.innerWidth<640);
-  useEffect(()=>{
-    const h=()=>setIsMobile(window.innerWidth<640);
-    window.addEventListener("resize",h);
-    return()=>window.removeEventListener("resize",h);
-  },[]);
 
   const top=points.find(p=>p.pct===0)||null;
   const bot=points.find(p=>p.pct===100)||null;
@@ -558,11 +663,20 @@ export default function App() {
     conditions:"コンディションを入力（すべて任意）",
   }[mode]||"";
 
-  if(!authReady) return <div style={{height:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{color:C.textDim,fontSize:11,letterSpacing:"0.15em"}}>LOADING...</div></div>;
+  if(!authReady||profileLoading)
+    return <div style={{height:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{color:C.textDim,fontSize:11,letterSpacing:"0.15em"}}>LOADING...</div></div>;
   if(!authUser) return <AuthScreen onAuth={u=>setAuthUser(u)}/>;
+  if(profileUsername===null) return <SetupScreen onDone={name=>setProfileUsername(name)}/>;
+
+  const navItems=[
+    {id:"feed",label:"フィード",icon:"🏠"},
+    {id:"analyze",label:"投稿",icon:"➕"},
+    {id:"mypage",label:"マイページ",icon:"👤"},
+  ];
 
   return (
     <div style={{height:"100vh",background:C.bg,color:C.text,fontFamily:"'DM Mono','Courier New',monospace",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      {/* ヘッダー */}
       <div style={{borderBottom:`1px solid ${C.border}`,padding:"9px 16px",display:"flex",alignItems:"center",gap:12,background:C.panel,flexShrink:0}}>
         <svg width="22" height="22" viewBox="0 0 28 28" fill="none">
           <path d="M14 2 L26 24 L14 20 L2 24 Z" stroke={C.accent} strokeWidth="1.8" fill="none"/>
@@ -570,130 +684,152 @@ export default function App() {
         </svg>
         <div>
           <div style={{fontSize:12,fontWeight:700,letterSpacing:"0.12em",color:C.accent}}>LEECH ANALYZER</div>
-          <div style={{fontSize:8,color:C.textDim,letterSpacing:"0.18em"}}>SAIL SHAPE v0.9</div>
+          <div style={{fontSize:8,color:C.textDim,letterSpacing:"0.18em"}}>SAIL SHAPE v1.3</div>
         </div>
-        <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
-          <button onClick={()=>setShowLog(true)} style={{background:"transparent",border:`1px solid ${saved.length>0?C.accentDim:C.border}`,borderRadius:3,padding:"3px 10px",fontSize:10,color:saved.length>0?C.accent:C.textDim,fontFamily:"inherit",cursor:"pointer",letterSpacing:"0.1em",fontWeight:saved.length>0?700:400}}>
-            LOG {saved.length>0?`(${saved.length})`:""}
-          </button>
-          <button onClick={()=>setTheme(t=>t==="dark"?"light":"dark")}
-            style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:3,padding:"2px 8px",fontSize:12,cursor:"pointer",lineHeight:1}}>
-            {theme==="dark"?"☀️":"🌙"}
-          </button>
-          <div style={{fontSize:9,color:C.textDim,border:`1px solid ${C.border}`,padding:"2px 8px",borderRadius:3,maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={authUser?.email}>{authUser?.email?.split("@")[0]}</div>
-          <button onClick={async()=>{await supabase.auth.signOut();setAuthUser(null);setSaved([]);}}
-            style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:3,padding:"2px 8px",fontSize:9,color:C.textDim,fontFamily:"inherit",cursor:"pointer",letterSpacing:"0.1em"}}>
-            LOGOUT
-          </button>
-        </div>
+        <div style={{marginLeft:"auto",fontSize:11,color:C.point,fontWeight:700,letterSpacing:"0.06em"}}>{profileUsername}</div>
       </div>
 
-      <div style={{height:34,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,200,255,0.05)",borderBottom:`1px solid ${C.border}`,fontSize:11,color:mode==="conditions"?C.point:C.accent,padding:"0 12px",textAlign:"center"}}>
-        {instr}
-      </div>
+      {/* コンテンツ */}
+      <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
 
-      <div style={{display:"flex",flex:1,minHeight:0}}>
-        <div style={{flex:1,display:"flex",flexDirection:"column",minWidth:0,minHeight:0}}>
-          {(isCanvasMode||mode==="upload")&&(
-            <div ref={wrapperRef} style={{flex:1,position:"relative",minHeight:0,overflow:"hidden",background:C.canvas}}>
-              {mode==="upload"?(
-                <label onDrop={e=>{e.preventDefault();handleFile(e.dataTransfer.files?.[0]);}} onDragOver={e=>e.preventDefault()}
-                  style={{position:"absolute",inset:8,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",gap:12,background:C.uploadBg,border:`2px dashed ${C.accentDim}`,borderRadius:8}}>
-                  <svg width="48" height="48" viewBox="0 0 48 48" fill="none"><path d="M24 4 L44 40 L24 34 L4 40 Z" stroke={C.accentDim} strokeWidth="2" fill="none"/></svg>
-                  <div style={{color:C.textDim,fontSize:12,textAlign:"center"}}>
-                    <div style={{color:C.accent,marginBottom:4}}>PHOTO をドロップ</div>
-                    またはタップして選択
+        {page==="feed"&&<FeedPage sessions={feedSessions} loading={feedLoading}/>}
+
+        {page==="analyze"&&(
+          <>
+            <div style={{height:34,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,200,255,0.05)",borderBottom:`1px solid ${C.border}`,fontSize:11,color:mode==="conditions"?C.point:C.accent,padding:"0 12px",textAlign:"center"}}>
+              {instr}
+            </div>
+            <div style={{display:"flex",flex:1,minHeight:0}}>
+              <div style={{flex:1,display:"flex",flexDirection:"column",minWidth:0,minHeight:0}}>
+                {(isCanvasMode||mode==="upload")&&(
+                  <div ref={wrapperRef} style={{flex:1,position:"relative",minHeight:0,overflow:"hidden",background:C.canvas}}>
+                    {mode==="upload"?(
+                      <label onDrop={e=>{e.preventDefault();handleFile(e.dataTransfer.files?.[0]);}} onDragOver={e=>e.preventDefault()}
+                        style={{position:"absolute",inset:8,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",gap:12,background:C.uploadBg,border:`2px dashed ${C.accentDim}`,borderRadius:8}}>
+                        <svg width="48" height="48" viewBox="0 0 48 48" fill="none"><path d="M24 4 L44 40 L24 34 L4 40 Z" stroke={C.accentDim} strokeWidth="2" fill="none"/></svg>
+                        <div style={{color:C.textDim,fontSize:12,textAlign:"center"}}>
+                          <div style={{color:C.accent,marginBottom:4}}>PHOTO をドロップ</div>
+                          またはタップして選択
+                        </div>
+                        <input type="file" accept="image/*" onChange={e=>handleFile(e.target.files?.[0])} style={{display:"none"}}/>
+                      </label>
+                    ):(
+                      <canvas ref={canvasRef} onClick={handleTap} onTouchEnd={handleTap} onMouseMove={handleMove} onTouchMove={handleMove} onMouseLeave={()=>setSnapHint(null)}
+                        style={{position:"absolute",inset:0,width:"100%",height:"100%",cursor:"crosshair",display:"block"}}/>
+                    )}
                   </div>
-                  <input type="file" accept="image/*" onChange={e=>handleFile(e.target.files?.[0])} style={{display:"none"}}/>
-                </label>
-              ):(
-                <canvas ref={canvasRef} onClick={handleTap} onTouchEnd={handleTap} onMouseMove={handleMove} onTouchMove={handleMove} onMouseLeave={()=>setSnapHint(null)}
-                  style={{position:"absolute",inset:0,width:"100%",height:"100%",cursor:"crosshair",display:"block"}}/>
+                )}
+                {mode==="conditions"&&(
+                  <ConditionsForm cond={cond} setCond={setCond} onDone={handleSave} metrics={metrics}/>
+                )}
+                {(isCanvasMode||mode==="upload")&&(
+                  <div style={{height:52,flexShrink:0,display:"flex",alignItems:"center",gap:8,padding:"0 12px",borderTop:`1px solid ${C.border}`}}>
+                    {isCanvasMode&&<Btn onClick={()=>{setPoints([]);setMetrics(null);setMode("setTop");}} secondary>RESET</Btn>}
+                    {isCanvasMode&&points.length>0&&<Btn onClick={()=>{
+                      setPoints(p=>{
+                        const next=p.slice(0,-1);
+                        const hasTop=next.some(pt=>pt.pct===0);
+                        const hasBot=next.some(pt=>pt.pct===100);
+                        if(!hasTop) setMode("setTop");
+                        else if(!hasBot) setMode("setBot");
+                        else setMode("trace");
+                        return next;
+                      });
+                    }} secondary>UNDO</Btn>}
+                    {isCanvasMode&&<Btn onClick={handleGoConditions} disabled={!allPlaced}>ANALYZE →</Btn>}
+                  </div>
+                )}
+              </div>
+              {!isMobile&&(
+                <div style={{width:185,flexShrink:0,borderLeft:`1px solid ${C.border}`,background:C.panel,padding:13,display:"flex",flexDirection:"column",gap:13,overflowY:"auto"}}>
+                  <div>
+                    <Label>STATUS</Label>
+                    <div style={{fontSize:10,letterSpacing:"0.1em",color:mode==="conditions"?C.point:C.accent}}>
+                      {mode==="upload"&&<span style={{color:C.textDim}}>WAITING</span>}
+                      {mode==="setTop"&&"SET TOP"}{mode==="setBot"&&"SET BOT"}
+                      {mode==="trace"&&(missing.length>0?`${3-missing.length}/3 MID`:"READY ✓")}
+                      {mode==="conditions"&&"LOGGING"}
+                    </div>
+                  </div>
+                  <div style={{borderTop:`1px solid ${C.border}`}}/>
+                  <div>
+                    <Label>GUIDE POINTS</Label>
+                    <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                      {DIVISIONS.map(pct=>{
+                        const placed=points.some(p=>p.pct===pct),isHint=snapHint===pct;
+                        return(
+                          <div key={pct} style={{display:"flex",alignItems:"center",gap:7,fontSize:11}}>
+                            <span style={{width:14,height:14,borderRadius:3,border:`1px solid ${placed?C.point:isHint?C.accent:C.border}`,background:placed?C.point:isHint?"rgba(0,200,255,0.2)":"transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:C.bg,fontWeight:700,flexShrink:0}}>
+                              {placed?"✓":""}
+                            </span>
+                            <span style={{color:placed?C.text:isHint?C.accent:C.textDim}}>{pct===0?"TOP":pct===100?"BOT":`${pct}%`}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div style={{borderTop:`1px solid ${C.border}`}}/>
+                  <div>
+                    <Label>METRICS</Label>
+                    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                      <Metric label="DRAFT POS" value={metrics?`${metrics.draftPosition}%`:"—"} sub="from top" active={!!metrics}/>
+                      <Metric label="MAX DRAFT" value={metrics?`${metrics.maxDraft}%`:"—"} sub="of chord" active={!!metrics}/>
+                      <Metric label="TWIST" value={metrics?`${metrics.twist}°`:"—"} sub="top vs bot" active={!!metrics}/>
+                    </div>
+                  </div>
+                  {metrics&&(
+                    <>
+                      <div style={{borderTop:`1px solid ${C.border}`}}/>
+                      <div>
+                        <Label>RESULT</Label>
+                        <div style={{fontSize:10,color:C.textDim,lineHeight:1.9}}>
+                          {metrics.draftPosition<35&&<div>⚠ ドラフト前寄り</div>}
+                          {metrics.draftPosition>55&&<div>⚠ ドラフト後ろ寄り</div>}
+                          {metrics.draftPosition>=35&&metrics.draftPosition<=55&&<div style={{color:C.point}}>✓ ドラフト標準</div>}
+                          {metrics.twist>20&&<div>⚠ ツイスト大きい</div>}
+                          {metrics.twist<=10&&<div>⚠ ツイスト小さい</div>}
+                          {metrics.twist>10&&metrics.twist<=20&&<div style={{color:C.point}}>✓ ツイスト標準</div>}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
             </div>
-          )}
+          </>
+        )}
 
-          {mode==="conditions"&&(
-            <ConditionsForm cond={cond} setCond={setCond} user={user} setUser={setUser} onDone={handleSave} metrics={metrics}/>
-          )}
-
-          {(isCanvasMode||mode==="upload")&&(
-            <div style={{height:52,flexShrink:0,display:"flex",alignItems:"center",gap:8,padding:"0 12px",borderTop:`1px solid ${C.border}`}}>
-              {isCanvasMode&&<Btn onClick={()=>{setPoints([]);setMetrics(null);setMode("setTop");}} secondary>RESET</Btn>}
-              {isCanvasMode&&points.length>0&&<Btn onClick={()=>{
-                setPoints(p=>{
-                  const next=p.slice(0,-1);
-                  // revert mode based on remaining points
-                  const hasTop=next.some(pt=>pt.pct===0);
-                  const hasBot=next.some(pt=>pt.pct===100);
-                  if(!hasTop) setMode("setTop");
-                  else if(!hasBot) setMode("setBot");
-                  else setMode("trace");
-                  return next;
-                });
-              }} secondary>UNDO</Btn>}
-              {isCanvasMode&&<Btn onClick={handleGoConditions} disabled={!allPlaced}>ANALYZE →</Btn>}
-              {mode==="upload"&&saved.length>0&&<div style={{marginLeft:"auto",fontSize:10,color:C.textDim}}>{saved.length}件のセッションが保存済み</div>}
-            </div>
-          )}
-        </div>
-
-        {!isMobile&&<div style={{width:185,flexShrink:0,borderLeft:`1px solid ${C.border}`,background:C.panel,padding:13,display:"flex",flexDirection:"column",gap:13,overflowY:"auto"}}>
-          <div>
-            <Label>STATUS</Label>
-            <div style={{fontSize:10,letterSpacing:"0.1em",color:mode==="conditions"?C.point:C.accent}}>
-              {mode==="upload"&&<span style={{color:C.textDim}}>WAITING</span>}
-              {mode==="setTop"&&"SET TOP"}{mode==="setBot"&&"SET BOT"}
-              {mode==="trace"&&(missing.length>0?`${3-missing.length}/3 MID`:"READY ✓")}
-              {mode==="conditions"&&"LOGGING"}
-            </div>
-          </div>
-          <div style={{borderTop:`1px solid ${C.border}`}}/>
-          <div>
-            <Label>GUIDE POINTS</Label>
-            <div style={{display:"flex",flexDirection:"column",gap:7}}>
-              {DIVISIONS.map(pct=>{
-                const placed=points.some(p=>p.pct===pct),isHint=snapHint===pct;
-                return(
-                  <div key={pct} style={{display:"flex",alignItems:"center",gap:7,fontSize:11}}>
-                    <span style={{width:14,height:14,borderRadius:3,border:`1px solid ${placed?C.point:isHint?C.accent:C.border}`,background:placed?C.point:isHint?"rgba(0,200,255,0.2)":"transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:C.bg,fontWeight:700,flexShrink:0}}>
-                      {placed?"✓":""}
-                    </span>
-                    <span style={{color:placed?C.text:isHint?C.accent:C.textDim}}>{pct===0?"TOP":pct===100?"BOT":`${pct}%`}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-          <div style={{borderTop:`1px solid ${C.border}`}}/>
-          <div>
-            <Label>METRICS</Label>
-            <div style={{display:"flex",flexDirection:"column",gap:12}}>
-              <Metric label="DRAFT POS" value={metrics?`${metrics.draftPosition}%`:"—"} sub="from top" active={!!metrics}/>
-              <Metric label="MAX DRAFT" value={metrics?`${metrics.maxDraft}%`:"—"} sub="of chord" active={!!metrics}/>
-              <Metric label="TWIST" value={metrics?`${metrics.twist}°`:"—"} sub="top vs bot" active={!!metrics}/>
-            </div>
-          </div>
-          {metrics&&(
-            <>
-              <div style={{borderTop:`1px solid ${C.border}`}}/>
-              <div>
-                <Label>RESULT</Label>
-                <div style={{fontSize:10,color:C.textDim,lineHeight:1.9}}>
-                  {metrics.draftPosition<35&&<div>⚠ ドラフト前寄り</div>}
-                  {metrics.draftPosition>55&&<div>⚠ ドラフト後ろ寄り</div>}
-                  {metrics.draftPosition>=35&&metrics.draftPosition<=55&&<div style={{color:C.point}}>✓ ドラフト標準</div>}
-                  {metrics.twist>20&&<div>⚠ ツイスト大きい</div>}
-                  {metrics.twist<=10&&<div>⚠ ツイスト小さい</div>}
-                  {metrics.twist>10&&metrics.twist<=20&&<div style={{color:C.point}}>✓ ツイスト標準</div>}
-                </div>
-              </div>
-            </>
-          )}
-        </div>}
+        {page==="mypage"&&(
+          <MyPage
+            sessions={mySessions}
+            username={profileUsername}
+            onUsernameChange={name=>{
+              setProfileUsername(name);
+              setFeedSessions(prev=>prev.map(s=>s.user===profileUsername?{...s,user:name}:s));
+              setMySessions(prev=>prev.map(s=>({...s,user:name})));
+            }}
+            theme={theme}
+            onThemeToggle={()=>setTheme(t=>t==="dark"?"light":"dark")}
+            onLogout={async()=>{await supabase.auth.signOut();setAuthUser(null);setFeedSessions([]);setMySessions([]);}}
+            onExport={()=>exportCSV(mySessions)}
+          />
+        )}
       </div>
 
-      {showLog&&<LogModal saved={saved} onClose={()=>setShowLog(false)} onExport={()=>exportCSV(saved)}/>}
+      {/* ボトムナビ */}
+      <div style={{height:56,flexShrink:0,borderTop:`1px solid ${C.border}`,background:C.panel,display:"flex",alignItems:"stretch"}}>
+        {navItems.map(item=>(
+          <button key={item.id}
+            onClick={()=>{
+              setPage(item.id);
+              if(item.id==="analyze"){setMode("upload");setImgObj(null);setPoints([]);setMetrics(null);}
+            }}
+            style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",color:page===item.id?C.accent:C.textDim,borderTop:page===item.id?`2px solid ${C.accent}`:"2px solid transparent",transition:"color 0.15s"}}>
+            <span style={{fontSize:18,lineHeight:1}}>{item.icon}</span>
+            <span style={{fontSize:9,fontFamily:"inherit",letterSpacing:"0.06em"}}>{item.label}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
