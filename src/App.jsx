@@ -148,123 +148,89 @@ function ConditionsForm({cond,setCond,user,setUser,onDone,metrics}) {
 }
 
 function LogModal({saved,onClose,onExport}) {
-  const [expanded,setExpanded]=useState(null);
   const [search,setSearch]=useState("");
-  const [fUser,setFUser]=useState("");
   const [fWind,setFWind]=useState("");
   const [fWave,setFWave]=useState("");
+  const [showFilter,setShowFilter]=useState(false);
 
-  const users=[...new Set(saved.map(s=>s.user).filter(Boolean))];
   const winds=[...new Set(saved.map(s=>s.cond?.windKnots).filter(Boolean))];
   const waves=[...new Set(saved.map(s=>s.cond?.waveHeight).filter(Boolean))];
 
   const filtered=[...saved].reverse().filter(s=>{
     const q=search.toLowerCase();
     const matchQ=!q||[s.user,s.cond?.boatClass,s.cond?.sailNumber,s.cond?.location,s.cond?.windDir,s.cond?.comment].some(v=>v?.toLowerCase().includes(q));
-    return matchQ&&(!fUser||s.user===fUser)&&(!fWind||s.cond?.windKnots===fWind)&&(!fWave||s.cond?.waveHeight===fWave);
+    return matchQ&&(!fWind||s.cond?.windKnots===fWind)&&(!fWave||s.cond?.waveHeight===fWave);
   });
 
-  const hasFilter=search||fUser||fWind||fWave;
+  const hasFilter=search||fWind||fWave;
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(10,15,30,0.98)",zIndex:100,display:"flex",flexDirection:"column"}}>
-      {/* Modal header */}
+    <div style={{position:"fixed",inset:0,background:C.bg,zIndex:100,display:"flex",flexDirection:"column",maxWidth:600,margin:"0 auto"}}>
+      {/* ヘッダー */}
       <div style={{padding:"12px 16px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8,flexShrink:0,background:C.panel}}>
         <div style={{color:C.accent,fontSize:13,fontWeight:700,letterSpacing:"0.12em"}}>SESSION LOG</div>
-        <div style={{fontSize:10,color:C.textDim}}>{filtered.length} / {saved.length} 件</div>
+        <div style={{fontSize:10,color:C.textDim}}>{filtered.length} / {saved.length}</div>
         <div style={{marginLeft:"auto",display:"flex",gap:8}}>
-          <Btn onClick={onExport} secondary style={{fontSize:10}}>CSV ↓</Btn>
-          <Btn onClick={onClose} secondary style={{fontSize:10}}>CLOSE</Btn>
+          <Btn onClick={()=>setShowFilter(f=>!f)} secondary style={{fontSize:10}}>{hasFilter?"🔍 ON":"🔍"}</Btn>
+          <Btn onClick={onExport} secondary style={{fontSize:10}}>CSV</Btn>
+          <Btn onClick={onClose} secondary style={{fontSize:10}}>✕</Btn>
         </div>
       </div>
 
-      {/* Search & filter */}
-      <div style={{padding:"10px 16px",borderBottom:`1px solid ${C.border}`,display:"flex",flexDirection:"column",gap:8,flexShrink:0,background:"rgba(15,23,41,0.95)"}}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  名前・艇種・場所・コメントで検索..."
-          style={{background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,borderRadius:4,padding:"7px 11px",color:C.text,fontSize:11,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"}}/>
-        <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-          {users.length>0&&<><span style={{fontSize:9,color:C.textDim,letterSpacing:"0.15em"}}>USER</span>
-            {users.map(u=><Chip key={u} label={u} active={fUser===u} onClick={()=>setFUser(f=>f===u?"":u)}/>)}
-            <span style={{fontSize:9,color:C.border}}>|</span></>}
-          {winds.length>0&&<><span style={{fontSize:9,color:C.textDim,letterSpacing:"0.15em"}}>風速</span>
-            {winds.map(w=><Chip key={w} label={w} active={fWind===w} onClick={()=>setFWind(f=>f===w?"":w)}/>)}
-            <span style={{fontSize:9,color:C.border}}>|</span></>}
-          {waves.length>0&&<><span style={{fontSize:9,color:C.textDim,letterSpacing:"0.15em"}}>波</span>
-            {waves.map(w=><Chip key={w} label={w} active={fWave===w} onClick={()=>setFWave(f=>f===w?"":w)}/>)}</>}
+      {/* 検索・フィルター（折りたたみ） */}
+      {showFilter&&(
+        <div style={{padding:"10px 16px",borderBottom:`1px solid ${C.border}`,display:"flex",flexDirection:"column",gap:8,flexShrink:0,background:"rgba(15,23,41,0.95)"}}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 場所・コメントなどで検索..."
+            style={{background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,borderRadius:4,padding:"7px 11px",color:C.text,fontSize:11,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"}}/>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+            {winds.length>0&&<><span style={{fontSize:9,color:C.textDim}}>風速</span>
+              {winds.map(w=><Chip key={w} label={w} active={fWind===w} onClick={()=>setFWind(f=>f===w?"":w)}/>)}</>}
+            {waves.length>0&&<><span style={{fontSize:9,color:C.textDim,marginLeft:4}}>波</span>
+              {waves.map(w=><Chip key={w} label={w} active={fWave===w} onClick={()=>setFWave(f=>f===w?"":w)}/>)}</>}
+          </div>
+          {hasFilter&&<button onClick={()=>{setSearch("");setFWind("");setFWave("");}}
+            style={{alignSelf:"flex-start",background:"transparent",border:`1px solid ${C.border}`,borderRadius:3,padding:"2px 10px",color:C.textDim,fontSize:9,fontFamily:"inherit",cursor:"pointer"}}>
+            リセット ×
+          </button>}
         </div>
-        {hasFilter&&(
-          <button onClick={()=>{setSearch("");setFUser("");setFWind("");setFWave("");}}
-            style={{alignSelf:"flex-start",background:"transparent",border:`1px solid ${C.border}`,borderRadius:3,padding:"2px 10px",color:C.textDim,fontSize:9,fontFamily:"inherit",cursor:"pointer",letterSpacing:"0.1em"}}>
-            フィルタをリセット ×
-          </button>
-        )}
-      </div>
+      )}
 
-      {/* List */}
-      <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:"12px 16px",display:"flex",flexDirection:"column",gap:10}}>
-        {filtered.length===0&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:40}}>条件に一致するセッションがありません</div>}
+      {/* フィード */}
+      <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+        {filtered.length===0&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:60}}>条件に一致するセッションがありません</div>}
         {filtered.map(s=>{
-          const hasImg=!!(s.annotatedImageUrl||s.originalImageUrl);
-          const isOpen=expanded===s.id;
+          const imgUrl=s.annotatedImageUrl||s.originalImageUrl;
           return(
-            <div key={s.id} style={{background:C.panel,border:`1px solid ${isOpen?C.accent:C.border}`,borderRadius:6,overflow:"hidden",transition:"border-color 0.2s"}}>
-              {/* 常に表示：コンパクト行 */}
-              <div onClick={()=>setExpanded(isOpen?null:s.id)}
-                style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",cursor:"pointer",userSelect:"none"}}>
-                {hasImg&&(
-                  <img src={s.annotatedImageUrl||s.originalImageUrl}
-                    style={{width:52,height:52,objectFit:"cover",borderRadius:4,border:`1px solid ${C.border}`,flexShrink:0}} alt="sail"/>
-                )}
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:4}}>
-                    <div style={{fontSize:10,color:C.point,letterSpacing:"0.06em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                      {s.cond?.date} {s.user&&`· ${s.user}`}
-                    </div>
-                    <div style={{fontSize:12,color:isOpen?C.accent:C.textDim,flexShrink:0}}>{isOpen?"▲":"▼"}</div>
-                  </div>
-                  <div style={{display:"flex",gap:12,marginTop:3}}>
-                    {[["D",`${s.metrics?.draftPosition}%`],["M",`${s.metrics?.maxDraft}%`],["T",`${s.metrics?.twist}°`]].map(([l,v])=>(
-                      <div key={l} style={{display:"flex",gap:3,alignItems:"baseline"}}>
-                        <span style={{fontSize:8,color:C.textDim}}>{l}</span>
-                        <span style={{fontSize:13,fontWeight:700,color:C.accent}}>{v}</span>
-                      </div>
-                    ))}
-                    {s.cond?.windKnots&&<span style={{fontSize:10,color:C.textDim,marginLeft:4}}>🌬{s.cond.windKnots}</span>}
-                  </div>
-                </div>
+            <div key={s.id} style={{borderBottom:`1px solid ${C.border}`}}>
+              {/* ユーザー・日付 */}
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 16px"}}>
+                <div style={{fontSize:12,fontWeight:700,color:C.point,letterSpacing:"0.06em"}}>{s.user||"—"}</div>
+                <div style={{fontSize:10,color:C.textDim}}>{s.cond?.date} {s.cond?.location&&`· ${s.cond.location}`}</div>
               </div>
-
-              {/* 展開時のみ：詳細 */}
-              {isOpen&&(
-                <div style={{borderTop:`1px solid ${C.border}`,padding:"12px 14px",display:"flex",flexDirection:"column",gap:8}}>
-                  {hasImg&&(
-                    <img src={s.annotatedImageUrl||s.originalImageUrl} onClick={()=>setExpanded(null)}
-                      style={{width:"100%",display:"block",maxHeight:400,objectFit:"contain",background:"#050a14",borderRadius:4,cursor:"pointer"}} alt="sail full"/>
-                  )}
-                  <div style={{display:"flex",gap:20}}>
-                    {[["DRAFT POS",`${s.metrics?.draftPosition}%`],["MAX DRAFT",`${s.metrics?.maxDraft}%`],["TWIST",`${s.metrics?.twist}°`]].map(([l,v])=>(
-                      <div key={l}><div style={{fontSize:8,color:C.textDim,letterSpacing:"0.1em"}}>{l}</div><div style={{fontSize:20,fontWeight:700,color:C.accent}}>{v}</div></div>
-                    ))}
-                  </div>
-                  {(s.cond?.windKnots||s.cond?.windDir||s.cond?.windStability)&&(
-                    <div style={{fontSize:11,color:C.textDim}}>🌬 {[s.cond.windKnots&&`${s.cond.windKnots}kt`,s.cond.windDir,s.cond.windStability].filter(Boolean).join(" · ")}</div>
-                  )}
-                  {(s.cond?.waveHeight||s.cond?.waveType)&&(
-                    <div style={{fontSize:11,color:C.textDim}}>🌊 {[s.cond.waveHeight,s.cond.waveType].filter(Boolean).join(" · ")}</div>
-                  )}
-                  {s.cond?.location&&<div style={{fontSize:11,color:C.textDim}}>📍 {s.cond.location}</div>}
-                  {(s.cond?.outhaul||s.cond?.cunningham||s.cond?.vang)&&(
-                    <div style={{fontSize:11,color:C.textDim}}>
-                      {[s.cond.outhaul&&`OUT:${s.cond.outhaul}`,s.cond.cunningham&&`CUN:${s.cond.cunningham}`,s.cond.vang&&`VNG:${s.cond.vang}`].filter(Boolean).join("  ")}
-                    </div>
-                  )}
-                  {s.cond?.comment&&(
-                    <div style={{fontSize:11,color:C.text,fontStyle:"italic",lineHeight:1.7,background:"rgba(255,255,255,0.03)",borderRadius:4,padding:"8px 10px",borderLeft:`2px solid ${C.accentDim}`}}>
-                      {s.cond.comment}
-                    </div>
-                  )}
+              {/* 画像フル幅 */}
+              {imgUrl&&<img src={imgUrl} style={{width:"100%",display:"block",maxHeight:360,objectFit:"contain",background:"#050a14"}} alt="sail"/>}
+              {/* メトリクス */}
+              <div style={{padding:"12px 16px",display:"flex",flexDirection:"column",gap:8}}>
+                <div style={{display:"flex",gap:24}}>
+                  {[["DRAFT",`${s.metrics?.draftPosition}%`],["MAX",`${s.metrics?.maxDraft}%`],["TWIST",`${s.metrics?.twist}°`]].map(([l,v])=>(
+                    <div key={l}><div style={{fontSize:8,color:C.textDim,letterSpacing:"0.15em"}}>{l}</div><div style={{fontSize:22,fontWeight:700,color:C.accent,lineHeight:1.1}}>{v}</div></div>
+                  ))}
                 </div>
-              )}
+                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                  {s.cond?.windKnots&&<span style={{fontSize:10,color:C.textDim}}>🌬 {s.cond.windKnots}kt{s.cond.windDir&&` · ${s.cond.windDir}`}{s.cond.windStability&&` · ${s.cond.windStability}`}</span>}
+                  {(s.cond?.waveHeight||s.cond?.waveType)&&<span style={{fontSize:10,color:C.textDim}}>🌊 {[s.cond.waveHeight,s.cond.waveType].filter(Boolean).join(" · ")}</span>}
+                </div>
+                {(s.cond?.outhaul||s.cond?.cunningham||s.cond?.vang)&&(
+                  <div style={{fontSize:10,color:C.textDim}}>
+                    {[s.cond.outhaul&&`アウト:${s.cond.outhaul}`,s.cond.cunningham&&`カニ:${s.cond.cunningham}`,s.cond.vang&&`バング:${s.cond.vang}`].filter(Boolean).join("  ·  ")}
+                  </div>
+                )}
+                {s.cond?.comment&&(
+                  <div style={{fontSize:12,color:C.text,lineHeight:1.7,borderLeft:`2px solid ${C.accentDim}`,paddingLeft:10,marginTop:2}}>
+                    {s.cond.comment}
+                  </div>
+                )}
+              </div>
             </div>
           );
         })}
