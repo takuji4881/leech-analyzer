@@ -1,12 +1,23 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "./supabase";
 
-const C = {
-  bg: "#0a0f1e", panel: "#0f1729", border: "#1e2d4a",
-  accent: "#00c8ff", accentDim: "#0077aa",
-  text: "#e8f0ff", textDim: "#5a7090",
-  point: "#00ffaa", line: "#ff6b35",
+const THEMES = {
+  dark: {
+    bg:"#0a0f1e", panel:"#0f1729", border:"#1e2d4a",
+    accent:"#00c8ff", accentDim:"#0077aa",
+    text:"#e8f0ff", textDim:"#5a7090",
+    point:"#00ffaa", line:"#ff6b35",
+    canvas:"#050a14", uploadBg:"#0a1320",
+  },
+  light: {
+    bg:"#f0f4f8", panel:"#ffffff", border:"#c8d8e8",
+    accent:"#0077cc", accentDim:"#005599",
+    text:"#1a2838", textDim:"#7090b0",
+    point:"#007a50", line:"#cc4400",
+    canvas:"#e4edf5", uploadBg:"#dce8f2",
+  },
 };
+let C = THEMES.dark;
 
 const DIVISIONS = [0, 25, 50, 75, 100];
 const SNAP_THRESHOLD = 40;
@@ -208,7 +219,7 @@ function LogModal({saved,onClose,onExport}) {
                 <div style={{fontSize:10,color:C.textDim}}>{s.cond?.date} {s.cond?.location&&`· ${s.cond.location}`}</div>
               </div>
               {/* 画像フル幅 */}
-              {imgUrl&&<img src={imgUrl} style={{width:"100%",display:"block",maxHeight:360,objectFit:"contain",background:"#050a14"}} alt="sail"/>}
+              {imgUrl&&<img src={imgUrl} style={{width:"100%",display:"block",maxHeight:360,objectFit:"contain",background:C.canvas}} alt="sail"/>}
               {/* メトリクス */}
               <div style={{padding:"12px 16px",display:"flex",flexDirection:"column",gap:8}}>
                 <div style={{display:"flex",gap:24}}>
@@ -307,6 +318,8 @@ export default function App() {
   const [showLog,setShowLog]=useState(false);
   const [authUser,setAuthUser]=useState(null);
   const [authReady,setAuthReady]=useState(false);
+  const [theme,setTheme]=useState(()=>localStorage.getItem("leech_theme")||"dark");
+  C=THEMES[theme];
   const canvasRef=useRef(null);
   const wrapperRef=useRef(null);
   const snapshotRef=useRef(null);
@@ -325,6 +338,7 @@ export default function App() {
   },[]);
 
   useEffect(()=>{localStorage.setItem(LS_USER,user);},[user]);
+  useEffect(()=>{localStorage.setItem("leech_theme",theme);draw();},[theme]);
   useEffect(()=>{
     if(!authUser)return;
     const fetchSessions=async()=>{
@@ -356,7 +370,7 @@ export default function App() {
       canvas.getContext("2d").setTransform(dpr,0,0,dpr,0,0);
     }
     const ctx=canvas.getContext("2d");
-    ctx.clearRect(0,0,W,H);ctx.fillStyle="#050a14";ctx.fillRect(0,0,W,H);
+    ctx.clearRect(0,0,W,H);ctx.fillStyle=C.canvas;ctx.fillRect(0,0,W,H);
     const scale=Math.min(W/img.naturalWidth,H/img.naturalHeight);
     const dw=img.naturalWidth*scale,dh=img.naturalHeight*scale;
     ctx.drawImage(img,(W-dw)/2,(H-dh)/2,dw,dh);
@@ -562,6 +576,10 @@ export default function App() {
           <button onClick={()=>setShowLog(true)} style={{background:"transparent",border:`1px solid ${saved.length>0?C.accentDim:C.border}`,borderRadius:3,padding:"3px 10px",fontSize:10,color:saved.length>0?C.accent:C.textDim,fontFamily:"inherit",cursor:"pointer",letterSpacing:"0.1em",fontWeight:saved.length>0?700:400}}>
             LOG {saved.length>0?`(${saved.length})`:""}
           </button>
+          <button onClick={()=>setTheme(t=>t==="dark"?"light":"dark")}
+            style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:3,padding:"2px 8px",fontSize:12,cursor:"pointer",lineHeight:1}}>
+            {theme==="dark"?"☀️":"🌙"}
+          </button>
           <div style={{fontSize:9,color:C.textDim,border:`1px solid ${C.border}`,padding:"2px 8px",borderRadius:3,maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={authUser?.email}>{authUser?.email?.split("@")[0]}</div>
           <button onClick={async()=>{await supabase.auth.signOut();setAuthUser(null);setSaved([]);}}
             style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:3,padding:"2px 8px",fontSize:9,color:C.textDim,fontFamily:"inherit",cursor:"pointer",letterSpacing:"0.1em"}}>
@@ -577,10 +595,10 @@ export default function App() {
       <div style={{display:"flex",flex:1,minHeight:0}}>
         <div style={{flex:1,display:"flex",flexDirection:"column",minWidth:0,minHeight:0}}>
           {(isCanvasMode||mode==="upload")&&(
-            <div ref={wrapperRef} style={{flex:1,position:"relative",minHeight:0,overflow:"hidden",background:"#050a14"}}>
+            <div ref={wrapperRef} style={{flex:1,position:"relative",minHeight:0,overflow:"hidden",background:C.canvas}}>
               {mode==="upload"?(
                 <label onDrop={e=>{e.preventDefault();handleFile(e.dataTransfer.files?.[0]);}} onDragOver={e=>e.preventDefault()}
-                  style={{position:"absolute",inset:8,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",gap:12,background:"#0a1320",border:`2px dashed ${C.accentDim}`,borderRadius:8}}>
+                  style={{position:"absolute",inset:8,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",gap:12,background:C.uploadBg,border:`2px dashed ${C.accentDim}`,borderRadius:8}}>
                   <svg width="48" height="48" viewBox="0 0 48 48" fill="none"><path d="M24 4 L44 40 L24 34 L4 40 Z" stroke={C.accentDim} strokeWidth="2" fill="none"/></svg>
                   <div style={{color:C.textDim,fontSize:12,textAlign:"center"}}>
                     <div style={{color:C.accent,marginBottom:4}}>PHOTO をドロップ</div>
