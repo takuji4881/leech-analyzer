@@ -198,7 +198,10 @@ function SetupScreen({onDone}){
 }
 
 function SessionCard({s}){
+  const [expanded,setExpanded]=useState(false);
   const imgUrl=s.annotatedImageUrl||s.originalImageUrl;
+  const comment=s.cond?.comment;
+  const isLong=comment&&(comment.length>55||comment.includes("\n"));
   return(
     <div style={{borderBottom:`1px solid ${C.border}`}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 16px"}}>
@@ -221,9 +224,17 @@ function SessionCard({s}){
             {[s.cond.outhaul&&`アウト:${s.cond.outhaul}`,s.cond.cunningham&&`カニ:${s.cond.cunningham}`,s.cond.vang&&`バング:${s.cond.vang}`].filter(Boolean).join("  ·  ")}
           </div>
         )}
-        {s.cond?.comment&&(
-          <div style={{fontSize:12,color:C.text,lineHeight:1.7,borderLeft:`2px solid ${C.accentDim}`,paddingLeft:10,marginTop:2}}>
-            {s.cond.comment}
+        {comment&&(
+          <div style={{borderLeft:`2px solid ${C.accentDim}`,paddingLeft:10,marginTop:2}}>
+            <div style={{fontSize:12,color:C.text,lineHeight:1.7,overflow:"hidden",display:"-webkit-box",WebkitBoxOrient:"vertical",WebkitLineClamp:expanded?99:2}}>
+              {comment}
+            </div>
+            {isLong&&(
+              <button onClick={()=>setExpanded(e=>!e)}
+                style={{background:"none",border:"none",padding:"2px 0",fontSize:11,color:C.accentDim,fontFamily:"inherit",cursor:"pointer",letterSpacing:"0.04em"}}>
+                {expanded?"閉じる":"…続きを読む"}
+              </button>
+            )}
           </div>
         )}
       </div>
