@@ -209,15 +209,92 @@ function Avatar({url,name,size=34}){
   );
 }
 
-function SessionCard({s,isOwn,onDelete,onEdit,avatarUrl}){
+function SessionCard({s,isOwn,onDelete,onEdit,avatarUrl,me}){
   const [expanded,setExpanded]=useState(false);
   const [showMenu,setShowMenu]=useState(false);
   const [confirming,setConfirming]=useState(false);
+  const [likeCount,setLikeCount]=useState(0);
+  const [userLiked,setUserLiked]=useState(false);
+  const [showComments,setShowComments]=useState(false);
+  const [comments,setComments]=useState(null);
+  const [commentCount,setCommentCount]=useState(0);
+  const [commentText,setCommentText]=useState("");
+  const [replyingTo,setReplyingTo]=useState(null);
+  const [replyText,setReplyText]=useState("");
+  const [submitting,setSubmitting]=useState(false);
+
   const imgUrl=s.annotatedImageUrl||s.originalImageUrl;
-  const comment=s.cond?.comment;
-  const isLong=comment&&(comment.length>55||comment.includes("\n"));
+  const cmt=s.cond?.comment;
+  const isLong=cmt&&(cmt.length>55||cmt.includes("\n"));
+
+  useEffect(()=>{
+    supabase.from("likes").select("user_id").eq("session_id",s.id)
+      .then(({data})=>{setLikeCount(data?.length||0);setUserLiked(data?.some(l=>l.user_id===me?.id)||false);});
+    supabase.from("comments").select("id",{count:"exact",head:true}).eq("session_id",s.id)
+      .then(({count})=>setCommentCount(count||0));
+  },[s.id]);
+
+  const handleLike=async()=>{
+    if(userLiked){
+      await supabase.from("likes").delete().eq("session_id",s.id).eq("user_id",me.id);
+      setLikeCount(c=>c-1);setUserLiked(false);
+    }else{
+      await supabase.from("likes").insert({session_id:s.id,user_id:me.id});
+      setLikeCount(c=>c+1);setUserLiked(true);
+    }
+  };
+
+  const loadComments=async()=>{
+    const{data}=await supabase.from("comments").select("*").eq("session_id",s.id).order("created_at",{ascending:true});
+    setComments(data||[]);
+  };
+
+  const handleToggleComments=()=>{
+    if(!showComments&&comments===null)loadComments();
+    setShowComments(c=>!c);
+  };
+
+  const handleSubmitComment=async()=>{
+    if(!commentText.trim()||submitting)return;
+    setSubmitting(true);
+    const{data,error}=await supabase.from("comments").insert({
+      session_id:s.id,user_id:me.id,user_name:me.username,avatar_url:me.avatarUrl,
+      body:commentText.trim(),parent_id:null,
+    }).select().single();
+    setSubmitting(false);
+    if(error)return;
+    setComments(prev=>[...(prev||[]),data]);
+    setCommentCount(c=>c+1);
+    setCommentText("");
+  };
+
+  const handleSubmitReply=async(parentId)=>{
+    if(!replyText.trim()||submitting)return;
+    setSubmitting(true);
+    const{data,error}=await supabase.from("comments").insert({
+      session_id:s.id,user_id:me.id,user_name:me.username,avatar_url:me.avatarUrl,
+      body:replyText.trim(),parent_id:parentId,
+    }).select().single();
+    setSubmitting(false);
+    if(error)return;
+    setComments(prev=>[...(prev||[]),data]);
+    setCommentCount(c=>c+1);
+    setReplyText("");setReplyingTo(null);
+  };
+
+  const handleDeleteComment=async(commentId)=>{
+    const toDelete=(comments||[]).filter(c=>c.id===commentId||c.parent_id===commentId);
+    await supabase.from("comments").delete().eq("id",commentId);
+    setComments(prev=>prev.filter(c=>c.id!==commentId&&c.parent_id!==commentId));
+    setCommentCount(c=>c-toDelete.length);
+  };
+
+  const topComments=(comments||[]).filter(c=>!c.parent_id);
+  const getReplies=pid=>(comments||[]).filter(c=>c.parent_id===pid);
+
   return(
     <div style={{borderBottom:`1px solid ${C.border}`}}>
+      {/* ヘッダー */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 16px"}}>
         <div style={{display:"flex",alignItems:"center",gap:9}}>
           <Avatar url={avatarUrl} name={s.user}/>
@@ -242,16 +319,17 @@ function SessionCard({s,isOwn,onDelete,onEdit,avatarUrl}){
           )}
         </div>
       </div>
+      {/* 削除確認 */}
       {confirming&&(
         <div style={{padding:"8px 16px",background:"rgba(255,107,107,0.07)",borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:10}}>
           <span style={{fontSize:11,color:C.textDim,flex:1}}>この投稿を削除しますか？</span>
-          <button onClick={()=>{onDelete(s);setConfirming(false);}}
-            style={{background:"#ff4444",border:"none",borderRadius:4,padding:"5px 12px",fontSize:11,color:"#fff",fontFamily:"inherit",fontWeight:700,cursor:"pointer"}}>削除</button>
-          <button onClick={()=>setConfirming(false)}
-            style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,padding:"5px 10px",fontSize:11,color:C.textDim,fontFamily:"inherit",cursor:"pointer"}}>キャンセル</button>
+          <button onClick={()=>{onDelete(s);setConfirming(false);}} style={{background:"#ff4444",border:"none",borderRadius:4,padding:"5px 12px",fontSize:11,color:"#fff",fontFamily:"inherit",fontWeight:700,cursor:"pointer"}}>削除</button>
+          <button onClick={()=>setConfirming(false)} style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,padding:"5px 10px",fontSize:11,color:C.textDim,fontFamily:"inherit",cursor:"pointer"}}>キャンセル</button>
         </div>
       )}
+      {/* 画像 */}
       {imgUrl&&<img src={imgUrl} style={{width:"100%",display:"block",maxHeight:400,objectFit:"contain",background:C.canvas}} alt="sail"/>}
+      {/* メトリクス・コンディション・セールコメント */}
       <div style={{padding:"12px 16px",display:"flex",flexDirection:"column",gap:8}}>
         <div style={{display:"flex",gap:24}}>
           {[["DRAFT",`${s.metrics?.draftPosition}%`],["MAX",`${s.metrics?.maxDraft}%`],["TWIST",`${s.metrics?.twist}°`]].map(([l,v])=>(
@@ -267,20 +345,88 @@ function SessionCard({s,isOwn,onDelete,onEdit,avatarUrl}){
             {[s.cond.outhaul&&`アウト:${s.cond.outhaul}`,s.cond.cunningham&&`カニ:${s.cond.cunningham}`,s.cond.vang&&`バング:${s.cond.vang}`].filter(Boolean).join("  ·  ")}
           </div>
         )}
-        {comment&&(
+        {cmt&&(
           <div style={{borderLeft:`2px solid ${C.accentDim}`,paddingLeft:10,marginTop:2}}>
-            <div style={{fontSize:12,color:C.text,lineHeight:1.7,overflow:"hidden",display:"-webkit-box",WebkitBoxOrient:"vertical",WebkitLineClamp:expanded?99:2}}>
-              {comment}
-            </div>
-            {isLong&&(
-              <button onClick={()=>setExpanded(e=>!e)}
-                style={{background:"none",border:"none",padding:"2px 0",fontSize:11,color:C.accentDim,fontFamily:"inherit",cursor:"pointer",letterSpacing:"0.04em"}}>
-                {expanded?"閉じる":"…続きを読む"}
-              </button>
-            )}
+            <div style={{fontSize:12,color:C.text,lineHeight:1.7,overflow:"hidden",display:"-webkit-box",WebkitBoxOrient:"vertical",WebkitLineClamp:expanded?99:2}}>{cmt}</div>
+            {isLong&&<button onClick={()=>setExpanded(e=>!e)} style={{background:"none",border:"none",padding:"2px 0",fontSize:11,color:C.accentDim,fontFamily:"inherit",cursor:"pointer"}}>{expanded?"閉じる":"…続きを読む"}</button>}
           </div>
         )}
       </div>
+      {/* アクションバー */}
+      <div style={{padding:"2px 16px 10px",display:"flex",gap:20}}>
+        <button onClick={handleLike} style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5,padding:0,fontFamily:"inherit"}}>
+          <span style={{fontSize:22,lineHeight:1}}>{userLiked?"❤️":"🤍"}</span>
+          {likeCount>0&&<span style={{fontSize:12,color:C.textDim,fontWeight:700}}>{likeCount}</span>}
+        </button>
+        <button onClick={handleToggleComments} style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5,padding:0,fontFamily:"inherit"}}>
+          <span style={{fontSize:22,lineHeight:1}}>💬</span>
+          {commentCount>0&&<span style={{fontSize:12,color:C.textDim,fontWeight:700}}>{commentCount}</span>}
+        </button>
+      </div>
+      {/* コメントセクション */}
+      {showComments&&(
+        <div style={{borderTop:`1px solid ${C.border}`,padding:"8px 16px 12px"}}>
+          {comments===null&&<div style={{fontSize:11,color:C.textDim,padding:"6px 0"}}>読み込み中...</div>}
+          {comments!==null&&(
+            <>
+              {topComments.length===0&&<div style={{fontSize:11,color:C.textDim,padding:"4px 0 8px"}}>まだコメントがありません</div>}
+              {topComments.map(cm=>(
+                <div key={cm.id} style={{marginBottom:10}}>
+                  <div style={{display:"flex",gap:8,alignItems:"flex-start"}}>
+                    <Avatar url={cm.avatar_url} name={cm.user_name} size={28}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{background:"rgba(128,128,128,0.1)",borderRadius:12,padding:"7px 11px",display:"inline-block",maxWidth:"100%"}}>
+                        <span style={{fontSize:11,fontWeight:700,color:C.point}}>{cm.user_name}</span>
+                        <span style={{fontSize:12,color:C.text,marginLeft:6,wordBreak:"break-word"}}>{cm.body}</span>
+                      </div>
+                      <div style={{display:"flex",gap:12,marginTop:3,paddingLeft:4}}>
+                        <button onClick={()=>setReplyingTo(replyingTo?.id===cm.id?null:{id:cm.id,username:cm.user_name})}
+                          style={{background:"none",border:"none",fontSize:10,color:C.accentDim,cursor:"pointer",padding:0,fontFamily:"inherit"}}>返信</button>
+                        {cm.user_id===me?.id&&<button onClick={()=>handleDeleteComment(cm.id)}
+                          style={{background:"none",border:"none",fontSize:10,color:"#ff6b6b",cursor:"pointer",padding:0,fontFamily:"inherit"}}>削除</button>}
+                      </div>
+                    </div>
+                  </div>
+                  {getReplies(cm.id).map(rp=>(
+                    <div key={rp.id} style={{display:"flex",gap:8,alignItems:"flex-start",marginTop:6,paddingLeft:36}}>
+                      <Avatar url={rp.avatar_url} name={rp.user_name} size={24}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{background:"rgba(128,128,128,0.1)",borderRadius:12,padding:"6px 10px",display:"inline-block",maxWidth:"100%"}}>
+                          <span style={{fontSize:11,fontWeight:700,color:C.point}}>{rp.user_name}</span>
+                          <span style={{fontSize:12,color:C.text,marginLeft:6,wordBreak:"break-word"}}>{rp.body}</span>
+                        </div>
+                        {rp.user_id===me?.id&&<button onClick={()=>handleDeleteComment(rp.id)}
+                          style={{display:"block",background:"none",border:"none",fontSize:10,color:"#ff6b6b",cursor:"pointer",padding:"2px 0",fontFamily:"inherit"}}>削除</button>}
+                      </div>
+                    </div>
+                  ))}
+                  {replyingTo?.id===cm.id&&(
+                    <div style={{display:"flex",gap:8,alignItems:"center",marginTop:6,paddingLeft:36}}>
+                      <input value={replyText} onChange={e=>setReplyText(e.target.value)}
+                        placeholder={`@${replyingTo.username} に返信...`}
+                        onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&handleSubmitReply(cm.id)}
+                        autoFocus
+                        style={{flex:1,background:"rgba(255,255,255,0.05)",border:`1px solid ${C.accent}`,borderRadius:20,padding:"6px 12px",color:C.text,fontSize:11,fontFamily:"inherit",outline:"none"}}/>
+                      <button onClick={()=>handleSubmitReply(cm.id)} disabled={!replyText.trim()||submitting}
+                        style={{background:replyText.trim()?C.accent:"transparent",border:`1px solid ${replyText.trim()?C.accent:C.border}`,borderRadius:4,padding:"5px 10px",fontSize:10,color:replyText.trim()?C.bg:C.textDim,fontFamily:"inherit",cursor:"pointer",fontWeight:700}}>送信</button>
+                      <button onClick={()=>setReplyingTo(null)} style={{background:"none",border:"none",color:C.textDim,fontSize:14,cursor:"pointer",padding:0}}>✕</button>
+                    </div>
+                  )}
+                </div>
+              ))}
+              <div style={{display:"flex",gap:8,alignItems:"center",marginTop:8,paddingTop:8,borderTop:`1px solid ${C.border}`}}>
+                <Avatar url={me?.avatarUrl} name={me?.username} size={28}/>
+                <input value={commentText} onChange={e=>setCommentText(e.target.value)}
+                  placeholder="コメントを追加..."
+                  onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&handleSubmitComment()}
+                  style={{flex:1,background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,borderRadius:20,padding:"6px 12px",color:C.text,fontSize:11,fontFamily:"inherit",outline:"none"}}/>
+                <button onClick={handleSubmitComment} disabled={!commentText.trim()||submitting}
+                  style={{background:commentText.trim()?C.accent:"transparent",border:`1px solid ${commentText.trim()?C.accent:C.border}`,borderRadius:4,padding:"5px 10px",fontSize:10,color:commentText.trim()?C.bg:C.textDim,fontFamily:"inherit",cursor:"pointer",fontWeight:700}}>投稿</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -316,7 +462,7 @@ function EditModal({session,onSave,onClose}){
   );
 }
 
-function FeedPage({sessions,loading,myUserId,onDelete,onEdit,profileMap}){
+function FeedPage({sessions,loading,myUserId,onDelete,onEdit,profileMap,me}){
   const [search,setSearch]=useState("");
   const [showFilter,setShowFilter]=useState(false);
   const [fWind,setFWind]=useState("");
@@ -355,13 +501,13 @@ function FeedPage({sessions,loading,myUserId,onDelete,onEdit,profileMap}){
       <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
         {loading&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:60}}>読み込み中...</div>}
         {!loading&&filtered.length===0&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:60}}>まだ投稿がありません</div>}
-        {filtered.map(s=><SessionCard key={s.id} s={s} isOwn={s.userId===myUserId} onDelete={onDelete} onEdit={onEdit} avatarUrl={profileMap?.[s.userId]}/>)}
+        {filtered.map(s=><SessionCard key={s.id} s={s} isOwn={s.userId===myUserId} onDelete={onDelete} onEdit={onEdit} avatarUrl={profileMap?.[s.userId]} me={me}/>)}
       </div>
     </div>
   );
 }
 
-function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout,onExport,onDelete,onEdit,avatarUrl,onAvatarUpload}){
+function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout,onExport,onDelete,onEdit,avatarUrl,onAvatarUpload,me}){
   const [editing,setEditing]=useState(false);
   const [newName,setNewName]=useState(username);
   const [saving,setSaving]=useState(false);
@@ -420,7 +566,7 @@ function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout
         <div style={{fontSize:9,color:C.textDim,letterSpacing:"0.2em"}}>MY SESSIONS</div>
       </div>
       {sessions.length===0&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:40}}>まだ投稿がありません</div>}
-      {sessions.map(s=><SessionCard key={s.id} s={s} isOwn onDelete={onDelete} onEdit={onEdit} avatarUrl={avatarUrl}/>)}
+      {sessions.map(s=><SessionCard key={s.id} s={s} isOwn onDelete={onDelete} onEdit={onEdit} avatarUrl={avatarUrl} me={me}/>)}
     </div>
   );
 }
@@ -825,6 +971,8 @@ export default function App() {
   if(!authUser) return <AuthScreen onAuth={u=>setAuthUser(u)}/>;
   if(profileUsername===null) return <SetupScreen onDone={name=>setProfileUsername(name)}/>;
 
+  const me={id:authUser.id,username:profileUsername,avatarUrl:profileMap[authUser.id]||null};
+
   const navItems=[
     {id:"feed",label:"フィード",icon:"🏠"},
     {id:"analyze",label:"投稿",icon:"➕"},
@@ -849,7 +997,7 @@ export default function App() {
       {/* コンテンツ */}
       <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
 
-        {page==="feed"&&<FeedPage sessions={feedSessions} loading={feedLoading} myUserId={authUser.id} onDelete={handleDelete} onEdit={setEditingSession} profileMap={profileMap}/>}
+        {page==="feed"&&<FeedPage sessions={feedSessions} loading={feedLoading} myUserId={authUser.id} onDelete={handleDelete} onEdit={setEditingSession} profileMap={profileMap} me={me}/>}
 
         {page==="analyze"&&(
           <>
@@ -973,6 +1121,7 @@ export default function App() {
             onEdit={setEditingSession}
             avatarUrl={profileMap[authUser.id]}
             onAvatarUpload={handleAvatarUpload}
+            me={me}
           />
         )}
       </div>
