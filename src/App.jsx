@@ -568,6 +568,7 @@ function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout
   const [saving,setSaving]=useState(false);
   const [err,setErr]=useState("");
   const [showDeleteAccount,setShowDeleteAccount]=useState(false);
+  const [showSettings,setShowSettings]=useState(false);
   const avatarInputRef=useRef(null);
 
   const handleSaveName=async()=>{
@@ -584,7 +585,7 @@ function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout
   return(
     <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0,overflowY:"auto"}}>
       <div style={{padding:"20px 16px",borderBottom:`1px solid ${C.border}`,background:C.panel,flexShrink:0}}>
-        <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:16}}>
+        <div style={{display:"flex",alignItems:"center",gap:14}}>
           <div style={{position:"relative",flexShrink:0,cursor:"pointer"}} onClick={()=>avatarInputRef.current?.click()}>
             <Avatar url={avatarUrl} name={username} size={52}/>
             <div style={{position:"absolute",bottom:0,right:0,width:18,height:18,borderRadius:"50%",background:C.accent,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,border:`2px solid ${C.bg}`}}>
@@ -610,21 +611,42 @@ function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout
             )}
             {err&&<div style={{fontSize:9,color:"#ff6b6b",marginTop:4}}>{err}</div>}
           </div>
-        </div>
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          {!editing&&<Btn onClick={()=>setEditing(true)} secondary style={{fontSize:10}}>名前変更</Btn>}
-          <Btn onClick={onThemeToggle} secondary style={{fontSize:10}}>{theme==="dark"?"☀️ ライト":"🌙 ダーク"}</Btn>
-          <Btn onClick={onExport} secondary style={{fontSize:10}}>CSV</Btn>
-          <Btn onClick={onLogout} secondary style={{fontSize:10,color:"#ff6b6b",borderColor:"rgba(255,107,107,0.5)"}}>ログアウト</Btn>
-        </div>
-        <div style={{marginTop:8,borderTop:`1px solid ${C.border}`,paddingTop:12}}>
-          <button onClick={()=>setShowDeleteAccount(true)}
-            style={{background:"transparent",border:"none",padding:0,fontSize:10,color:"rgba(255,107,107,0.5)",fontFamily:"inherit",cursor:"pointer",letterSpacing:"0.06em"}}>
-            アカウントを削除
-          </button>
+          {!editing&&(
+            <button onClick={()=>setShowSettings(true)}
+              style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:8,width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,cursor:"pointer",flexShrink:0}}>
+              ⚙️
+            </button>
+          )}
         </div>
       </div>
       {showDeleteAccount&&<DeleteAccountModal onConfirm={onDeleteAccount} onClose={()=>setShowDeleteAccount(false)}/>}
+      {showSettings&&(
+        <div style={{position:"fixed",inset:0,zIndex:200}} onClick={()=>setShowSettings(false)}>
+          <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.5)"}}/>
+          <div onClick={e=>e.stopPropagation()}
+            style={{position:"absolute",bottom:0,left:0,right:0,maxWidth:600,margin:"0 auto",background:C.panel,borderRadius:"16px 16px 0 0",paddingBottom:"env(safe-area-inset-bottom,16px)"}}>
+            <div style={{width:36,height:4,borderRadius:2,background:C.border,margin:"10px auto 4px"}}/>
+            {[
+              {icon:"✏️",label:"ユーザー名を変更",action:()=>{setEditing(true);setShowSettings(false);}},
+              {icon:theme==="dark"?"☀️":"🌙",label:theme==="dark"?"ライトモード":"ダークモード",action:()=>{onThemeToggle();setShowSettings(false);}},
+              {icon:"📊",label:"CSVエクスポート",action:()=>{onExport();setShowSettings(false);}},
+            ].map(({icon,label,action})=>(
+              <button key={label} onClick={action}
+                style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"14px 20px",background:"none",border:"none",borderBottom:`1px solid ${C.border}`,color:C.text,fontSize:13,fontFamily:"inherit",cursor:"pointer",textAlign:"left"}}>
+                <span style={{fontSize:18,width:24,textAlign:"center"}}>{icon}</span>{label}
+              </button>
+            ))}
+            <button onClick={()=>{onLogout();setShowSettings(false);}}
+              style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"14px 20px",background:"none",border:"none",borderBottom:`1px solid ${C.border}`,color:"#ff6b6b",fontSize:13,fontFamily:"inherit",cursor:"pointer",textAlign:"left"}}>
+              <span style={{fontSize:18,width:24,textAlign:"center"}}>🚪</span>ログアウト
+            </button>
+            <button onClick={()=>{setShowSettings(false);setShowDeleteAccount(true);}}
+              style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"14px 20px",background:"none",border:"none",color:"rgba(255,107,107,0.6)",fontSize:13,fontFamily:"inherit",cursor:"pointer",textAlign:"left"}}>
+              <span style={{fontSize:18,width:24,textAlign:"center"}}>🗑</span>アカウントを削除
+            </button>
+          </div>
+        </div>
+      )}
       <div style={{padding:"10px 16px",borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
         <div style={{fontSize:9,color:C.textDim,letterSpacing:"0.2em"}}>MY SESSIONS</div>
       </div>
