@@ -769,9 +769,10 @@ export default function App() {
       img.src=url;
     });
     const compressed=await compressAvatar(file);
+    if(!compressed){alert("画像の圧縮に失敗しました");return;}
     const path=`avatars/${uid}.jpg`;
     const{error}=await supabase.storage.from("sail-images").upload(path,compressed,{upsert:true});
-    if(error){alert("アップロードに失敗しました");return;}
+    if(error){console.error("Storage error:",error);alert("アップロードに失敗しました\n"+error.message);return;}
     const{data:{publicUrl}}=supabase.storage.from("sail-images").getPublicUrl(path);
     const avatarUrl=publicUrl+"?t="+Date.now();
     await supabase.from("profiles").update({avatar_url:avatarUrl}).eq("id",uid);
