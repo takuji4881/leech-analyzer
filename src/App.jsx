@@ -198,8 +198,9 @@ function SetupScreen({onDone}){
   );
 }
 
-function SessionCard({s,isOwn,onDelete}){
+function SessionCard({s,isOwn,onDelete,onEdit}){
   const [expanded,setExpanded]=useState(false);
+  const [showMenu,setShowMenu]=useState(false);
   const [confirming,setConfirming]=useState(false);
   const imgUrl=s.annotatedImageUrl||s.originalImageUrl;
   const comment=s.cond?.comment;
@@ -208,10 +209,23 @@ function SessionCard({s,isOwn,onDelete}){
     <div style={{borderBottom:`1px solid ${C.border}`}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 16px"}}>
         <div style={{fontSize:12,fontWeight:700,color:C.point,letterSpacing:"0.06em"}}>{s.user||"—"}</div>
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,position:"relative"}}>
           <div style={{fontSize:10,color:C.textDim}}>{s.cond?.date}{s.cond?.location&&` · ${s.cond.location}`}</div>
-          {isOwn&&<button onClick={()=>setConfirming(c=>!c)}
-            style={{background:"none",border:"none",color:C.textDim,fontSize:16,cursor:"pointer",padding:"0 2px",lineHeight:1}}>⋮</button>}
+          {isOwn&&(
+            <>
+              <button onClick={()=>{setShowMenu(m=>!m);setConfirming(false);}}
+                style={{background:"none",border:"none",color:C.textDim,fontSize:18,cursor:"pointer",padding:"0 4px",lineHeight:1}}>⋮</button>
+              {showMenu&&(
+                <div style={{position:"absolute",top:24,right:0,background:C.panel,border:`1px solid ${C.border}`,borderRadius:6,zIndex:10,minWidth:110,boxShadow:"0 4px 16px rgba(0,0,0,0.3)",overflow:"hidden"}}>
+                  <button onClick={()=>{onEdit(s);setShowMenu(false);}}
+                    style={{display:"block",width:"100%",padding:"10px 16px",background:"none",border:"none",color:C.text,fontSize:12,fontFamily:"inherit",textAlign:"left",cursor:"pointer"}}>✏️ 編集する</button>
+                  <div style={{height:1,background:C.border}}/>
+                  <button onClick={()=>{setConfirming(true);setShowMenu(false);}}
+                    style={{display:"block",width:"100%",padding:"10px 16px",background:"none",border:"none",color:"#ff6b6b",fontSize:12,fontFamily:"inherit",textAlign:"left",cursor:"pointer"}}>🗑 削除する</button>
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
       {confirming&&(
@@ -257,7 +271,38 @@ function SessionCard({s,isOwn,onDelete}){
   );
 }
 
-function FeedPage({sessions,loading,myUserId,onDelete}){
+function EditModal({session,onSave,onClose}){
+  const [cond,setCond]=useState({...session.cond});
+  const [saving,setSaving]=useState(false);
+
+  const handleSave=async()=>{
+    setSaving(true);
+    const{error}=await supabase.from("sessions").update({
+      boat_class:cond.boatClass, sail_number:cond.sailNumber,
+      date:cond.date, location:cond.location,
+      wind_knots:cond.windKnots, wind_dir:cond.windDir, wind_stability:cond.windStability,
+      wave_height:cond.waveHeight, wave_type:cond.waveType,
+      outhaul:cond.outhaul, cunningham:cond.cunningham, vang:cond.vang,
+      comment:cond.comment,
+    }).eq("id",session.id);
+    setSaving(false);
+    if(error){alert("保存に失敗しました");return;}
+    onSave({...session,cond});
+  };
+
+  return(
+    <div style={{position:"fixed",inset:0,background:C.bg,zIndex:200,display:"flex",flexDirection:"column",maxWidth:600,margin:"0 auto"}}>
+      <div style={{padding:"10px 16px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8,flexShrink:0,background:C.panel}}>
+        <div style={{color:C.accent,fontSize:13,fontWeight:700,letterSpacing:"0.12em",flex:1}}>投稿を編集</div>
+        <div style={{fontSize:10,color:C.textDim}}>{session.cond?.date}</div>
+        <Btn onClick={onClose} secondary style={{fontSize:10}}>✕</Btn>
+      </div>
+      <ConditionsForm cond={cond} setCond={setCond} onDone={handleSave} metrics={session.metrics} saveLabel={saving?"保存中...":"保存する ✓"}/>
+    </div>
+  );
+}
+
+function FeedPage({sessions,loading,myUserId,onDelete,onEdit}){
   const [search,setSearch]=useState("");
   const [showFilter,setShowFilter]=useState(false);
   const [fWind,setFWind]=useState("");
@@ -296,13 +341,13 @@ function FeedPage({sessions,loading,myUserId,onDelete}){
       <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
         {loading&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:60}}>読み込み中...</div>}
         {!loading&&filtered.length===0&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:60}}>まだ投稿がありません</div>}
-        {filtered.map(s=><SessionCard key={s.id} s={s} isOwn={s.userId===myUserId} onDelete={onDelete}/>)}
+        {filtered.map(s=><SessionCard key={s.id} s={s} isOwn={s.userId===myUserId} onDelete={onDelete} onEdit={onEdit}/>)}
       </div>
     </div>
   );
 }
 
-function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout,onExport,onDelete}){
+function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout,onExport,onDelete,onEdit}){
   const [editing,setEditing]=useState(false);
   const [newName,setNewName]=useState(username);
   const [saving,setSaving]=useState(false);
@@ -356,12 +401,12 @@ function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout
         <div style={{fontSize:9,color:C.textDim,letterSpacing:"0.2em"}}>MY SESSIONS</div>
       </div>
       {sessions.length===0&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:40}}>まだ投稿がありません</div>}
-      {sessions.map(s=><SessionCard key={s.id} s={s} isOwn onDelete={onDelete}/>)}
+      {sessions.map(s=><SessionCard key={s.id} s={s} isOwn onDelete={onDelete} onEdit={onEdit}/>)}
     </div>
   );
 }
 
-function ConditionsForm({cond,setCond,onDone,metrics}){
+function ConditionsForm({cond,setCond,onDone,metrics,saveLabel="SAVE & FINISH"}){
   const set = k => v => setCond(prev=>({...prev,[k]:v}));
   const toggle = (k,v) => setCond(prev=>({...prev,[k]:prev[k]===v?"":v}));
   return (
@@ -420,7 +465,7 @@ function ConditionsForm({cond,setCond,onDone,metrics}){
         <textarea value={cond.comment} onChange={e=>set("comment")(e.target.value)} placeholder="セールの形の感想、改善点など..." rows={3}
           style={{background:"rgba(255,255,255,0.04)",border:`1px solid ${C.border}`,borderRadius:4,padding:"8px 9px",color:C.text,fontSize:11,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box",resize:"vertical",lineHeight:1.6}}/>
       </Field>
-      <button onClick={onDone} style={{background:C.point,color:C.bg,border:"none",borderRadius:4,padding:"11px",fontSize:12,fontFamily:"inherit",letterSpacing:"0.15em",fontWeight:700,cursor:"pointer"}}>SAVE & FINISH</button>
+      <button onClick={onDone} style={{background:C.point,color:C.bg,border:"none",borderRadius:4,padding:"11px",fontSize:12,fontFamily:"inherit",letterSpacing:"0.15em",fontWeight:700,cursor:"pointer"}}>{saveLabel}</button>
       <div style={{height:8}}/>
     </div>
   );
@@ -437,6 +482,7 @@ export default function App() {
   const [feedSessions,setFeedSessions]=useState([]);
   const [mySessions,setMySessions]=useState([]);
   const [feedLoading,setFeedLoading]=useState(true);
+  const [editingSession,setEditingSession]=useState(null);
   const [authUser,setAuthUser]=useState(null);
   const [authReady,setAuthReady]=useState(false);
   const [profileUsername,setProfileUsername]=useState(null);
@@ -677,6 +723,12 @@ export default function App() {
     setPage("feed");
   };
 
+  const handleEditSave=(updated)=>{
+    setFeedSessions(prev=>prev.map(s=>s.id===updated.id?updated:s));
+    setMySessions(prev=>prev.map(s=>s.id===updated.id?updated:s));
+    setEditingSession(null);
+  };
+
   const handleDelete=async(session)=>{
     const{error}=await supabase.from("sessions").delete().eq("id",session.id);
     if(error){alert("削除に失敗しました");return;}
@@ -731,7 +783,7 @@ export default function App() {
       {/* コンテンツ */}
       <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
 
-        {page==="feed"&&<FeedPage sessions={feedSessions} loading={feedLoading} myUserId={authUser.id} onDelete={handleDelete}/>}
+        {page==="feed"&&<FeedPage sessions={feedSessions} loading={feedLoading} myUserId={authUser.id} onDelete={handleDelete} onEdit={setEditingSession}/>}
 
         {page==="analyze"&&(
           <>
@@ -852,9 +904,12 @@ export default function App() {
             onLogout={async()=>{await supabase.auth.signOut();setAuthUser(null);setFeedSessions([]);setMySessions([]);}}
             onExport={()=>exportCSV(mySessions)}
             onDelete={handleDelete}
+            onEdit={setEditingSession}
           />
         )}
       </div>
+
+      {editingSession&&<EditModal session={editingSession} onSave={handleEditSave} onClose={()=>setEditingSession(null)}/>}
 
       {/* ボトムナビ */}
       <div style={{height:56,flexShrink:0,borderTop:`1px solid ${C.border}`,background:C.panel,display:"flex",alignItems:"stretch"}}>
