@@ -222,6 +222,7 @@ function SessionCard({s,isOwn,onDelete,onEdit,avatarUrl,me}){
   const [replyingTo,setReplyingTo]=useState(null);
   const [replyText,setReplyText]=useState("");
   const [submitting,setSubmitting]=useState(false);
+  const [copied,setCopied]=useState(false);
 
   const imgUrl=s.annotatedImageUrl||s.originalImageUrl;
   const cmt=s.cond?.comment;
@@ -289,6 +290,24 @@ function SessionCard({s,isOwn,onDelete,onEdit,avatarUrl,me}){
     setCommentCount(c=>c-toDelete.length);
   };
 
+  const handleShare=async()=>{
+    const imgUrl=s.annotatedImageUrl||s.originalImageUrl;
+    const lines=[
+      `${s.user||"—"} のセール形状 (${s.cond?.date||""}${s.cond?.location?` · ${s.cond.location}`:""})`,
+      `Draft: ${s.metrics?.draftPosition}%  Max: ${s.metrics?.maxDraft}%  Twist: ${s.metrics?.twist}°`,
+      s.cond?.windKnots?`🌬 ${s.cond.windKnots}kt${s.cond?.windDir?` · ${s.cond.windDir}`:""}`:null,
+      s.cond?.comment?`"${s.cond.comment}"`:null,
+      imgUrl?"— LEECH ANALYZER":null,
+    ].filter(Boolean).join("\n");
+    if(navigator.share){
+      try{
+        await navigator.share({title:"LEECH ANALYZER",text:lines,...(imgUrl?{url:imgUrl}:{})});
+        return;
+      }catch(e){if(e.name==="AbortError")return;}
+    }
+    navigator.clipboard?.writeText(lines).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000)});
+  };
+
   const topComments=(comments||[]).filter(c=>!c.parent_id);
   const getReplies=pid=>(comments||[]).filter(c=>c.parent_id===pid);
 
@@ -353,7 +372,7 @@ function SessionCard({s,isOwn,onDelete,onEdit,avatarUrl,me}){
         )}
       </div>
       {/* アクションバー */}
-      <div style={{padding:"2px 16px 10px",display:"flex",gap:20}}>
+      <div style={{padding:"2px 16px 10px",display:"flex",gap:20,alignItems:"center"}}>
         <button onClick={handleLike} style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5,padding:0,fontFamily:"inherit"}}>
           <span style={{fontSize:22,lineHeight:1}}>{userLiked?"❤️":"🤍"}</span>
           {likeCount>0&&<span style={{fontSize:12,color:C.textDim,fontWeight:700}}>{likeCount}</span>}
@@ -361,6 +380,12 @@ function SessionCard({s,isOwn,onDelete,onEdit,avatarUrl,me}){
         <button onClick={handleToggleComments} style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5,padding:0,fontFamily:"inherit"}}>
           <span style={{fontSize:22,lineHeight:1}}>💬</span>
           {commentCount>0&&<span style={{fontSize:12,color:C.textDim,fontWeight:700}}>{commentCount}</span>}
+        </button>
+        <button onClick={handleShare} style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5,padding:0,fontFamily:"inherit",marginLeft:"auto"}}>
+          {copied
+            ?<span style={{fontSize:11,color:C.point,fontWeight:700}}>コピー済み ✓</span>
+            :<span style={{fontSize:20,lineHeight:1}}>📤</span>
+          }
         </button>
       </div>
       {/* コメントセクション */}
