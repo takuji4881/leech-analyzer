@@ -57,6 +57,7 @@ const EMPTY_COND = { boatClass:"", sailNumber:"", date:today(), location:"", win
 function mapSession(s) {
   return {
     id: s.id,
+    userId: s.user_id,
     originalImageUrl: s.original_image_url,
     annotatedImageUrl: s.annotated_image_url,
     user: s.user_name,
@@ -197,8 +198,9 @@ function SetupScreen({onDone}){
   );
 }
 
-function SessionCard({s}){
+function SessionCard({s,isOwn,onDelete}){
   const [expanded,setExpanded]=useState(false);
+  const [confirming,setConfirming]=useState(false);
   const imgUrl=s.annotatedImageUrl||s.originalImageUrl;
   const comment=s.cond?.comment;
   const isLong=comment&&(comment.length>55||comment.includes("\n"));
@@ -206,8 +208,21 @@ function SessionCard({s}){
     <div style={{borderBottom:`1px solid ${C.border}`}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 16px"}}>
         <div style={{fontSize:12,fontWeight:700,color:C.point,letterSpacing:"0.06em"}}>{s.user||"—"}</div>
-        <div style={{fontSize:10,color:C.textDim}}>{s.cond?.date}{s.cond?.location&&` · ${s.cond.location}`}</div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{fontSize:10,color:C.textDim}}>{s.cond?.date}{s.cond?.location&&` · ${s.cond.location}`}</div>
+          {isOwn&&<button onClick={()=>setConfirming(c=>!c)}
+            style={{background:"none",border:"none",color:C.textDim,fontSize:16,cursor:"pointer",padding:"0 2px",lineHeight:1}}>⋮</button>}
+        </div>
       </div>
+      {confirming&&(
+        <div style={{padding:"8px 16px",background:"rgba(255,107,107,0.07)",borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontSize:11,color:C.textDim,flex:1}}>この投稿を削除しますか？</span>
+          <button onClick={()=>{onDelete(s);setConfirming(false);}}
+            style={{background:"#ff4444",border:"none",borderRadius:4,padding:"5px 12px",fontSize:11,color:"#fff",fontFamily:"inherit",fontWeight:700,cursor:"pointer"}}>削除</button>
+          <button onClick={()=>setConfirming(false)}
+            style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,padding:"5px 10px",fontSize:11,color:C.textDim,fontFamily:"inherit",cursor:"pointer"}}>キャンセル</button>
+        </div>
+      )}
       {imgUrl&&<img src={imgUrl} style={{width:"100%",display:"block",maxHeight:400,objectFit:"contain",background:C.canvas}} alt="sail"/>}
       <div style={{padding:"12px 16px",display:"flex",flexDirection:"column",gap:8}}>
         <div style={{display:"flex",gap:24}}>
@@ -242,7 +257,7 @@ function SessionCard({s}){
   );
 }
 
-function FeedPage({sessions,loading}){
+function FeedPage({sessions,loading,myUserId,onDelete}){
   const [search,setSearch]=useState("");
   const [showFilter,setShowFilter]=useState(false);
   const [fWind,setFWind]=useState("");
@@ -281,13 +296,13 @@ function FeedPage({sessions,loading}){
       <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
         {loading&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:60}}>読み込み中...</div>}
         {!loading&&filtered.length===0&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:60}}>まだ投稿がありません</div>}
-        {filtered.map(s=><SessionCard key={s.id} s={s}/>)}
+        {filtered.map(s=><SessionCard key={s.id} s={s} isOwn={s.userId===myUserId} onDelete={onDelete}/>)}
       </div>
     </div>
   );
 }
 
-function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout,onExport}){
+function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout,onExport,onDelete}){
   const [editing,setEditing]=useState(false);
   const [newName,setNewName]=useState(username);
   const [saving,setSaving]=useState(false);
@@ -341,7 +356,7 @@ function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout
         <div style={{fontSize:9,color:C.textDim,letterSpacing:"0.2em"}}>MY SESSIONS</div>
       </div>
       {sessions.length===0&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:40}}>まだ投稿がありません</div>}
-      {sessions.map(s=><SessionCard key={s.id} s={s}/>)}
+      {sessions.map(s=><SessionCard key={s.id} s={s} isOwn onDelete={onDelete}/>)}
     </div>
   );
 }
@@ -662,6 +677,19 @@ export default function App() {
     setPage("feed");
   };
 
+  const handleDelete=async(session)=>{
+    const{error}=await supabase.from("sessions").delete().eq("id",session.id);
+    if(error){alert("削除に失敗しました");return;}
+    const paths=[session.originalImageUrl,session.annotatedImageUrl].map(url=>{
+      if(!url)return null;
+      const m=url.indexOf("/sail-images/");
+      return m>=0?url.slice(m+"/sail-images/".length):null;
+    }).filter(Boolean);
+    if(paths.length>0)await supabase.storage.from("sail-images").remove(paths);
+    setFeedSessions(prev=>prev.filter(s=>s.id!==session.id));
+    setMySessions(prev=>prev.filter(s=>s.id!==session.id));
+  };
+
   const top=points.find(p=>p.pct===0)||null;
   const bot=points.find(p=>p.pct===100)||null;
   const missing=top&&bot?DIVISIONS.filter(pct=>pct!==0&&pct!==100&&!points.some(p=>p.pct===pct)):[];
@@ -703,7 +731,7 @@ export default function App() {
       {/* コンテンツ */}
       <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
 
-        {page==="feed"&&<FeedPage sessions={feedSessions} loading={feedLoading}/>}
+        {page==="feed"&&<FeedPage sessions={feedSessions} loading={feedLoading} myUserId={authUser.id} onDelete={handleDelete}/>}
 
         {page==="analyze"&&(
           <>
@@ -823,6 +851,7 @@ export default function App() {
             onThemeToggle={()=>setTheme(t=>t==="dark"?"light":"dark")}
             onLogout={async()=>{await supabase.auth.signOut();setAuthUser(null);setFeedSessions([]);setMySessions([]);}}
             onExport={()=>exportCSV(mySessions)}
+            onDelete={handleDelete}
           />
         )}
       </div>
