@@ -1,6 +1,6 @@
 # LEECH ANALYZER 開発メモ
 
-最終更新: 2026-04-27
+最終更新: 2026-04-28
 
 ---
 
@@ -8,6 +8,8 @@
 
 | 日付 | 内容 |
 |------|------|
+| 2026-04-28 | プロフィールアイコン追加・投稿編集・削除機能（v1.5） |
+| 2026-04-28 | フィード・マイページ・初回ユーザー名設定・ライト/ダークモード（v1.3〜1.4） |
 | 2026-04-27 | Supabase Storage対応・元画像＋アノテーション画像の2枚保存（v1.2） |
 | 2026-04-27 | Supabase Auth ログイン機能追加・自分のデータのみ表示（v1.1） |
 | 2026-04-17 | Supabase連携追加・クラウド保存対応（v1.0） |
@@ -29,18 +31,23 @@
 - **Vercel URL**: `https://leech-analyzer.vercel.app`
 - **GitHub**: `https://github.com/takuji4881/leech-analyzer`
 
-### 実装済み機能 (v1.2)
+### 実装済み機能 (v1.5)
 - 写真アップロード・canvasレンダリング
 - マスト分割ガイドライン（0% / 25% / 50% / 75% / 100%）+ スナップ機能
 - リーチトレースによる数値化（Draft Position・Max Draft・Twist）
 - コンディション入力フォーム（風・波・セッティング・コメント）
-- ユーザー名入力・次回自動入力
 - Supabase連携 — クラウド保存・全デバイス共有
-- サムネイル付きLOGモーダル
-- テキスト検索・フィルター（ユーザー・風速・波）
+- テキスト検索・フィルター（風速・波）
 - CSVエクスポート
-- **Supabase Auth — ログイン・新規登録・自分のデータのみ表示（v1.1で追加）**
-- **Supabase Storage — 元画像＋アノテーション画像の2枚をクラウド保存（v1.2で追加）**
+- Supabase Auth — ログイン・新規登録
+- Supabase Storage — 元画像＋アノテーション画像の2枚をクラウド保存（ML用）
+- **ライト/ダークモード切り替え（v1.3で追加）**
+- **3ページ構成: フィード（全員の投稿）・投稿・マイページ（v1.3で追加）**
+- **初回ログイン時のユーザー名セットアップ画面（v1.3で追加）**
+- **ボトムナビゲーション（v1.3で追加）**
+- **コメントの「続きを読む」展開（v1.4で追加）**
+- **投稿の編集機能・削除機能（v1.4で追加）**
+- **プロフィールアイコン登録・投稿への表示・更新時の古いファイル自動削除（v1.5で追加）**
 
 ---
 
@@ -62,13 +69,13 @@ DB: Supabase (PostgreSQL)
 - **Publishable key**: `sb_publishable_VxvBDlrdOwGMP3IxR_B0oQ_gLhbpKBg`
 - **パッケージ**: `@supabase/supabase-js` インストール済み
 
-### テーブル: sessions（現在の構成）
+### テーブル: sessions
 
 ```sql
 create table sessions (
   id bigint generated always as identity primary key,
   created_at timestamp with time zone default now(),
-  user_id uuid references auth.users(id),   -- v1.1で追加
+  user_id uuid references auth.users(id),
   user_name text,
   boat_class text,
   sail_number text,
@@ -87,27 +94,55 @@ create table sessions (
   vang text,
   comment text,
   snapshot text,               -- 旧base64（廃止予定）
-  original_image_url text,     -- v1.2で追加：元画像のStorage URL
-  annotated_image_url text     -- v1.2で追加：アノテーション画像のStorage URL
+  original_image_url text,     -- 元画像のStorage URL
+  annotated_image_url text     -- アノテーション画像のStorage URL
 );
 
--- RLSポリシー（v1.1で変更）
+-- RLSポリシー
 alter table sessions enable row level security;
 create policy "users can insert own" on sessions
   for insert with check (auth.uid() = user_id);
-create policy "users can select own" on sessions
-  for select using (auth.uid() = user_id);
+create policy "all auth can select" on sessions
+  for select using (auth.uid() is not null);   -- 全員のフィードを見るため全ユーザー読み取り可
+create policy "own update" on sessions
+  for update using (auth.uid() = user_id);
+create policy "own delete" on sessions
+  for delete using (auth.uid() = user_id);
 ```
 
-### Storage: sail-images（v1.2で追加）
-
-- **バケット**: `sail-images`（Public）
-- **保存パス**: `{user_id}/{timestamp}_original.jpg` / `{user_id}/{timestamp}_annotated.jpg`
-- **ポリシー**: 認証済みユーザーのみアップロード可
+### テーブル: profiles（v1.3で追加）
 
 ```sql
+create table profiles (
+  id uuid references auth.users(id) primary key,
+  username text unique not null,
+  avatar_url text,             -- v1.5で追加
+  created_at timestamp with time zone default now()
+);
+
+alter table profiles enable row level security;
+create policy "public read" on profiles
+  for select using (auth.uid() is not null);
+create policy "own insert" on profiles
+  for insert with check (auth.uid() = id);
+create policy "own update" on profiles
+  for update using (auth.uid() = id);
+```
+
+### Storage: sail-images
+
+- **バケット**: `sail-images`（Public）
+- **保存パス（セッション画像）**: `{user_id}/{timestamp}_original.jpg` / `{user_id}/{timestamp}_annotated.jpg`
+- **保存パス（アバター）**: `avatars/{user_id}_{timestamp}.jpg`
+
+```sql
+-- 全ストレージポリシー
 create policy "auth users can upload" on storage.objects
   for insert to authenticated with check (bucket_id = 'sail-images');
+create policy "auth users can update" on storage.objects
+  for update to authenticated using (bucket_id = 'sail-images');
+create policy "auth users can delete" on storage.objects
+  for delete to authenticated using (bucket_id = 'sail-images');
 ```
 
 ### 画像の用途（ML用）
@@ -167,3 +202,4 @@ git push
 | 画像が縦長になる | canvasリサイズ問題 | wrapperのoffsetWidth/Heightを毎回読む実装済み |
 | 保存エラー | Supabase RLS or ネットワーク | ブラウザのコンソールでエラー内容確認 |
 | Supabaseが停止している | 無料プランの非アクティブ停止 | ダッシュボードから「復元」ボタンで再開（無料） |
+| Storageアップロード400エラー | upsertにUPDATEポリシーが必要 | `auth users can update` ポリシーを追加済み |
