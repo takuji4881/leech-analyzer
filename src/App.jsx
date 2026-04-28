@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "./supabase";
+import { Heart, MessageCircle, Share2, Settings, X, Camera, Home, Plus, User, Pencil, Trash2, LogOut, Download, Sun, Moon, Check, MoreVertical } from "lucide-react";
 
 const THEMES = {
   dark: {
@@ -324,14 +325,17 @@ function SessionCard({s,isOwn,onDelete,onEdit,avatarUrl,me}){
           {isOwn&&(
             <>
               <button onClick={()=>{setShowMenu(m=>!m);setConfirming(false);}}
-                style={{background:"none",border:"none",color:C.textDim,fontSize:18,cursor:"pointer",padding:"0 4px",lineHeight:1}}>⋮</button>
+                style={{background:"none",border:"none",color:C.textDim,cursor:"pointer",padding:"0 4px",display:"flex",alignItems:"center"}}>
+          <MoreVertical size={18} strokeWidth={1.8}/></button>
               {showMenu&&(
                 <div style={{position:"absolute",top:24,right:0,background:C.panel,border:`1px solid ${C.border}`,borderRadius:6,zIndex:10,minWidth:110,boxShadow:"0 4px 16px rgba(0,0,0,0.3)",overflow:"hidden"}}>
                   <button onClick={()=>{onEdit(s);setShowMenu(false);}}
-                    style={{display:"block",width:"100%",padding:"10px 16px",background:"none",border:"none",color:C.text,fontSize:12,fontFamily:"inherit",textAlign:"left",cursor:"pointer"}}>✏️ 編集する</button>
+                    style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"10px 16px",background:"none",border:"none",color:C.text,fontSize:12,fontFamily:"inherit",textAlign:"left",cursor:"pointer"}}>
+                    <Pencil size={14} strokeWidth={1.8}/>編集する</button>
                   <div style={{height:1,background:C.border}}/>
                   <button onClick={()=>{setConfirming(true);setShowMenu(false);}}
-                    style={{display:"block",width:"100%",padding:"10px 16px",background:"none",border:"none",color:"#ff6b6b",fontSize:12,fontFamily:"inherit",textAlign:"left",cursor:"pointer"}}>🗑 削除する</button>
+                    style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"10px 16px",background:"none",border:"none",color:"#ff6b6b",fontSize:12,fontFamily:"inherit",textAlign:"left",cursor:"pointer"}}>
+                    <Trash2 size={14} strokeWidth={1.8}/>削除する</button>
                 </div>
               )}
             </>
@@ -373,18 +377,18 @@ function SessionCard({s,isOwn,onDelete,onEdit,avatarUrl,me}){
       </div>
       {/* アクションバー */}
       <div style={{padding:"2px 16px 10px",display:"flex",gap:20,alignItems:"center"}}>
-        <button onClick={handleLike} style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5,padding:0,fontFamily:"inherit"}}>
-          <span style={{fontSize:22,lineHeight:1}}>{userLiked?"❤️":"🤍"}</span>
-          {likeCount>0&&<span style={{fontSize:12,color:C.textDim,fontWeight:700}}>{likeCount}</span>}
+        <button onClick={handleLike} style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5,padding:0,fontFamily:"inherit",color:userLiked?"#ff4d6d":C.textDim}}>
+          <Heart size={18} strokeWidth={1.8} fill={userLiked?"currentColor":"none"}/>
+          {likeCount>0&&<span style={{fontSize:12,fontWeight:700}}>{likeCount}</span>}
         </button>
-        <button onClick={handleToggleComments} style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5,padding:0,fontFamily:"inherit"}}>
-          <span style={{fontSize:22,lineHeight:1}}>💬</span>
-          {commentCount>0&&<span style={{fontSize:12,color:C.textDim,fontWeight:700}}>{commentCount}</span>}
+        <button onClick={handleToggleComments} style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5,padding:0,fontFamily:"inherit",color:C.textDim}}>
+          <MessageCircle size={18} strokeWidth={1.8}/>
+          {commentCount>0&&<span style={{fontSize:12,fontWeight:700}}>{commentCount}</span>}
         </button>
-        <button onClick={handleShare} style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5,padding:0,fontFamily:"inherit",marginLeft:"auto"}}>
+        <button onClick={handleShare} style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5,padding:0,fontFamily:"inherit",marginLeft:"auto",color:C.textDim}}>
           {copied
             ?<span style={{fontSize:11,color:C.point,fontWeight:700}}>コピー済み ✓</span>
-            :<span style={{fontSize:20,lineHeight:1}}>📤</span>
+            :<Share2 size={18} strokeWidth={1.8}/>
           }
         </button>
       </div>
@@ -434,7 +438,7 @@ function SessionCard({s,isOwn,onDelete,onEdit,avatarUrl,me}){
                         style={{flex:1,background:"rgba(255,255,255,0.05)",border:`1px solid ${C.accent}`,borderRadius:20,padding:"6px 12px",color:C.text,fontSize:11,fontFamily:"inherit",outline:"none"}}/>
                       <button onClick={()=>handleSubmitReply(cm.id)} disabled={!replyText.trim()||submitting}
                         style={{background:replyText.trim()?C.accent:"transparent",border:`1px solid ${replyText.trim()?C.accent:C.border}`,borderRadius:4,padding:"5px 10px",fontSize:10,color:replyText.trim()?C.bg:C.textDim,fontFamily:"inherit",cursor:"pointer",fontWeight:700}}>送信</button>
-                      <button onClick={()=>setReplyingTo(null)} style={{background:"none",border:"none",color:C.textDim,fontSize:14,cursor:"pointer",padding:0}}>✕</button>
+                      <button onClick={()=>setReplyingTo(null)} style={{background:"none",border:"none",color:C.textDim,cursor:"pointer",padding:0,display:"flex",alignItems:"center"}}><X size={16} strokeWidth={1.8}/></button>
                     </div>
                   )}
                 </div>
@@ -480,7 +484,7 @@ function EditModal({session,onSave,onClose}){
       <div style={{padding:"10px 16px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8,flexShrink:0,background:C.panel}}>
         <div style={{color:C.accent,fontSize:13,fontWeight:700,letterSpacing:"0.12em",flex:1}}>投稿を編集</div>
         <div style={{fontSize:10,color:C.textDim}}>{session.cond?.date}</div>
-        <Btn onClick={onClose} secondary style={{fontSize:10}}>✕</Btn>
+        <Btn onClick={onClose} secondary style={{padding:"5px 8px",display:"flex",alignItems:"center"}}><X size={14} strokeWidth={1.8}/></Btn>
       </div>
       <ConditionsForm cond={cond} setCond={setCond} onDone={handleSave} metrics={session.metrics} saveLabel={saving?"保存中...":"保存する ✓"}/>
     </div>
@@ -588,8 +592,8 @@ function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout
         <div style={{display:"flex",alignItems:"center",gap:14}}>
           <div style={{position:"relative",flexShrink:0,cursor:"pointer"}} onClick={()=>avatarInputRef.current?.click()}>
             <Avatar url={avatarUrl} name={username} size={52}/>
-            <div style={{position:"absolute",bottom:0,right:0,width:18,height:18,borderRadius:"50%",background:C.accent,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,border:`2px solid ${C.bg}`}}>
-              📷
+            <div style={{position:"absolute",bottom:0,right:0,width:18,height:18,borderRadius:"50%",background:C.accent,display:"flex",alignItems:"center",justifyContent:"center",border:`2px solid ${C.bg}`,color:C.bg}}>
+              <Camera size={10} strokeWidth={2}/>
             </div>
             <input ref={avatarInputRef} type="file" accept="image/*" onChange={onAvatarUpload} style={{display:"none"}}/>
           </div>
@@ -613,8 +617,8 @@ function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout
           </div>
           {!editing&&(
             <button onClick={()=>setShowSettings(true)}
-              style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:8,width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,cursor:"pointer",flexShrink:0}}>
-              ⚙️
+              style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:8,width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,color:C.textDim}}>
+              <Settings size={18} strokeWidth={1.8}/>
             </button>
           )}
         </div>
@@ -627,22 +631,22 @@ function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout
             style={{position:"absolute",bottom:0,left:0,right:0,maxWidth:600,margin:"0 auto",background:C.panel,borderRadius:"16px 16px 0 0",paddingBottom:"env(safe-area-inset-bottom,16px)"}}>
             <div style={{width:36,height:4,borderRadius:2,background:C.border,margin:"10px auto 4px"}}/>
             {[
-              {icon:"✏️",label:"ユーザー名を変更",action:()=>{setEditing(true);setShowSettings(false);}},
-              {icon:theme==="dark"?"☀️":"🌙",label:theme==="dark"?"ライトモード":"ダークモード",action:()=>{onThemeToggle();setShowSettings(false);}},
-              {icon:"📊",label:"CSVエクスポート",action:()=>{onExport();setShowSettings(false);}},
-            ].map(({icon,label,action})=>(
+              {Icon:Pencil,label:"ユーザー名を変更",action:()=>{setEditing(true);setShowSettings(false);}},
+              {Icon:theme==="dark"?Sun:Moon,label:theme==="dark"?"ライトモード":"ダークモード",action:()=>{onThemeToggle();setShowSettings(false);}},
+              {Icon:Download,label:"CSVエクスポート",action:()=>{onExport();setShowSettings(false);}},
+            ].map(({Icon:ItemIcon,label,action})=>(
               <button key={label} onClick={action}
                 style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"14px 20px",background:"none",border:"none",borderBottom:`1px solid ${C.border}`,color:C.text,fontSize:13,fontFamily:"inherit",cursor:"pointer",textAlign:"left"}}>
-                <span style={{fontSize:18,width:24,textAlign:"center"}}>{icon}</span>{label}
+                <span style={{width:24,display:"flex",justifyContent:"center"}}><ItemIcon size={18} strokeWidth={1.8}/></span>{label}
               </button>
             ))}
             <button onClick={()=>{onLogout();setShowSettings(false);}}
               style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"14px 20px",background:"none",border:"none",borderBottom:`1px solid ${C.border}`,color:"#ff6b6b",fontSize:13,fontFamily:"inherit",cursor:"pointer",textAlign:"left"}}>
-              <span style={{fontSize:18,width:24,textAlign:"center"}}>🚪</span>ログアウト
+              <span style={{width:24,display:"flex",justifyContent:"center"}}><LogOut size={18} strokeWidth={1.8}/></span>ログアウト
             </button>
             <button onClick={()=>{setShowSettings(false);setShowDeleteAccount(true);}}
               style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"14px 20px",background:"none",border:"none",color:"rgba(255,107,107,0.6)",fontSize:13,fontFamily:"inherit",cursor:"pointer",textAlign:"left"}}>
-              <span style={{fontSize:18,width:24,textAlign:"center"}}>🗑</span>アカウントを削除
+              <span style={{width:24,display:"flex",justifyContent:"center"}}><Trash2 size={18} strokeWidth={1.8}/></span>アカウントを削除
             </button>
           </div>
         </div>
@@ -1075,9 +1079,9 @@ export default function App() {
   const me={id:authUser.id,username:profileUsername,avatarUrl:profileMap[authUser.id]||null};
 
   const navItems=[
-    {id:"feed",label:"フィード",icon:"🏠"},
-    {id:"analyze",label:"投稿",icon:"➕"},
-    {id:"mypage",label:"マイページ",icon:"👤"},
+    {id:"feed",label:"フィード",Icon:Home},
+    {id:"analyze",label:"投稿",Icon:Plus},
+    {id:"mypage",label:"マイページ",Icon:User},
   ];
 
   return (
@@ -1165,8 +1169,8 @@ export default function App() {
                         const placed=points.some(p=>p.pct===pct),isHint=snapHint===pct;
                         return(
                           <div key={pct} style={{display:"flex",alignItems:"center",gap:7,fontSize:11}}>
-                            <span style={{width:14,height:14,borderRadius:3,border:`1px solid ${placed?C.point:isHint?C.accent:C.border}`,background:placed?C.point:isHint?"rgba(0,200,255,0.2)":"transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:C.bg,fontWeight:700,flexShrink:0}}>
-                              {placed?"✓":""}
+                            <span style={{width:14,height:14,borderRadius:3,border:`1px solid ${placed?C.point:isHint?C.accent:C.border}`,background:placed?C.point:isHint?"rgba(0,200,255,0.2)":"transparent",display:"flex",alignItems:"center",justifyContent:"center",color:C.bg,flexShrink:0}}>
+                              {placed&&<Check size={9} strokeWidth={2.5}/>}
                             </span>
                             <span style={{color:placed?C.text:isHint?C.accent:C.textDim}}>{pct===0?"TOP":pct===100?"BOT":`${pct}%`}</span>
                           </div>
@@ -1239,7 +1243,7 @@ export default function App() {
               if(item.id==="analyze"){setMode("upload");setImgObj(null);setPoints([]);setMetrics(null);}
             }}
             style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",color:page===item.id?C.accent:C.textDim,borderTop:page===item.id?`2px solid ${C.accent}`:"2px solid transparent",transition:"color 0.15s"}}>
-            <span style={{fontSize:18,lineHeight:1}}>{item.icon}</span>
+            <item.Icon size={22} strokeWidth={1.8}/>
             <span style={{fontSize:9,fontFamily:"inherit",letterSpacing:"0.06em"}}>{item.label}</span>
           </button>
         ))}
