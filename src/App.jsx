@@ -487,6 +487,36 @@ function EditModal({session,onSave,onClose}){
   );
 }
 
+function DeleteAccountModal({onConfirm,onClose}){
+  const [deleting,setDeleting]=useState(false);
+  const handle=async()=>{
+    setDeleting(true);
+    try{await onConfirm();}
+    catch(e){alert("削除に失敗しました\n"+e.message);setDeleting(false);}
+  };
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+      <div style={{background:C.panel,border:"1px solid rgba(255,100,100,0.45)",borderRadius:12,padding:24,width:"100%",maxWidth:320,display:"flex",flexDirection:"column",gap:16}}>
+        <div style={{fontSize:13,fontWeight:700,color:"#ff6b6b",letterSpacing:"0.08em"}}>アカウントを削除</div>
+        <div style={{fontSize:11,color:C.text,lineHeight:1.9}}>
+          この操作は取り消せません。<br/>
+          すべての投稿・コメント・いいね・プロフィール・画像が完全に削除されます。
+        </div>
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={onClose} disabled={deleting}
+            style={{flex:1,background:"transparent",border:`1px solid ${C.border}`,borderRadius:6,padding:"10px",fontSize:11,color:C.textDim,fontFamily:"inherit",cursor:deleting?"not-allowed":"pointer"}}>
+            キャンセル
+          </button>
+          <button onClick={handle} disabled={deleting}
+            style={{flex:1,background:deleting?"#661111":"#cc2222",border:"none",borderRadius:6,padding:"10px",fontSize:11,color:"#fff",fontFamily:"inherit",fontWeight:700,cursor:deleting?"not-allowed":"pointer"}}>
+            {deleting?"削除中...":"削除する"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FeedPage({sessions,loading,myUserId,onDelete,onEdit,profileMap,me}){
   const [search,setSearch]=useState("");
   const [showFilter,setShowFilter]=useState(false);
@@ -532,11 +562,12 @@ function FeedPage({sessions,loading,myUserId,onDelete,onEdit,profileMap,me}){
   );
 }
 
-function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout,onExport,onDelete,onEdit,avatarUrl,onAvatarUpload,me}){
+function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout,onExport,onDelete,onEdit,avatarUrl,onAvatarUpload,onDeleteAccount,me}){
   const [editing,setEditing]=useState(false);
   const [newName,setNewName]=useState(username);
   const [saving,setSaving]=useState(false);
   const [err,setErr]=useState("");
+  const [showDeleteAccount,setShowDeleteAccount]=useState(false);
   const avatarInputRef=useRef(null);
 
   const handleSaveName=async()=>{
@@ -586,7 +617,14 @@ function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout
           <Btn onClick={onExport} secondary style={{fontSize:10}}>CSV</Btn>
           <Btn onClick={onLogout} secondary style={{fontSize:10,color:"#ff6b6b",borderColor:"rgba(255,107,107,0.5)"}}>ログアウト</Btn>
         </div>
+        <div style={{marginTop:8,borderTop:`1px solid ${C.border}`,paddingTop:12}}>
+          <button onClick={()=>setShowDeleteAccount(true)}
+            style={{background:"transparent",border:"none",padding:0,fontSize:10,color:"rgba(255,107,107,0.5)",fontFamily:"inherit",cursor:"pointer",letterSpacing:"0.06em"}}>
+            アカウントを削除
+          </button>
+        </div>
       </div>
+      {showDeleteAccount&&<DeleteAccountModal onConfirm={onDeleteAccount} onClose={()=>setShowDeleteAccount(false)}/>}
       <div style={{padding:"10px 16px",borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
         <div style={{fontSize:9,color:C.textDim,letterSpacing:"0.2em"}}>MY SESSIONS</div>
       </div>
@@ -920,6 +958,22 @@ export default function App() {
     setPage("feed");
   };
 
+  const handleDeleteAccount=async()=>{
+    const extractPath=url=>{
+      if(!url)return null;
+      const m=url.indexOf("/sail-images/");
+      return m>=0?url.slice(m+"/sail-images/".length).split("?")[0]:null;
+    };
+    const paths=[
+      ...mySessions.flatMap(s=>[extractPath(s.originalImageUrl),extractPath(s.annotatedImageUrl)]),
+      extractPath(profileMap[authUser.id]),
+    ].filter(Boolean);
+    if(paths.length>0)await supabase.storage.from("sail-images").remove(paths);
+    const{error}=await supabase.rpc("delete_user");
+    if(error)throw error;
+    setAuthUser(null);setFeedSessions([]);setMySessions([]);setProfileUsername(null);setProfileMap({});
+  };
+
   const handleAvatarUpload=async(e)=>{
     const file=e.target.files?.[0];
     if(!file)return;
@@ -1146,6 +1200,7 @@ export default function App() {
             onEdit={setEditingSession}
             avatarUrl={profileMap[authUser.id]}
             onAvatarUpload={handleAvatarUpload}
+            onDeleteAccount={handleDeleteAccount}
             me={me}
           />
         )}
