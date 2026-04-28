@@ -198,7 +198,18 @@ function SetupScreen({onDone}){
   );
 }
 
-function SessionCard({s,isOwn,onDelete,onEdit}){
+function Avatar({url,name,size=34}){
+  return(
+    <div style={{width:size,height:size,borderRadius:"50%",background:`linear-gradient(135deg,${C.accent},${C.point})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:Math.round(size*0.4),fontWeight:700,color:C.bg,flexShrink:0,overflow:"hidden"}}>
+      {url
+        ?<img src={url} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>
+        :(name||"?")[0].toUpperCase()
+      }
+    </div>
+  );
+}
+
+function SessionCard({s,isOwn,onDelete,onEdit,avatarUrl}){
   const [expanded,setExpanded]=useState(false);
   const [showMenu,setShowMenu]=useState(false);
   const [confirming,setConfirming]=useState(false);
@@ -208,7 +219,10 @@ function SessionCard({s,isOwn,onDelete,onEdit}){
   return(
     <div style={{borderBottom:`1px solid ${C.border}`}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 16px"}}>
-        <div style={{fontSize:12,fontWeight:700,color:C.point,letterSpacing:"0.06em"}}>{s.user||"—"}</div>
+        <div style={{display:"flex",alignItems:"center",gap:9}}>
+          <Avatar url={avatarUrl} name={s.user}/>
+          <div style={{fontSize:12,fontWeight:700,color:C.point,letterSpacing:"0.06em"}}>{s.user||"—"}</div>
+        </div>
         <div style={{display:"flex",alignItems:"center",gap:8,position:"relative"}}>
           <div style={{fontSize:10,color:C.textDim}}>{s.cond?.date}{s.cond?.location&&` · ${s.cond.location}`}</div>
           {isOwn&&(
@@ -302,7 +316,7 @@ function EditModal({session,onSave,onClose}){
   );
 }
 
-function FeedPage({sessions,loading,myUserId,onDelete,onEdit}){
+function FeedPage({sessions,loading,myUserId,onDelete,onEdit,profileMap}){
   const [search,setSearch]=useState("");
   const [showFilter,setShowFilter]=useState(false);
   const [fWind,setFWind]=useState("");
@@ -341,17 +355,18 @@ function FeedPage({sessions,loading,myUserId,onDelete,onEdit}){
       <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
         {loading&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:60}}>読み込み中...</div>}
         {!loading&&filtered.length===0&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:60}}>まだ投稿がありません</div>}
-        {filtered.map(s=><SessionCard key={s.id} s={s} isOwn={s.userId===myUserId} onDelete={onDelete} onEdit={onEdit}/>)}
+        {filtered.map(s=><SessionCard key={s.id} s={s} isOwn={s.userId===myUserId} onDelete={onDelete} onEdit={onEdit} avatarUrl={profileMap?.[s.userId]}/>)}
       </div>
     </div>
   );
 }
 
-function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout,onExport,onDelete,onEdit}){
+function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout,onExport,onDelete,onEdit,avatarUrl,onAvatarUpload}){
   const [editing,setEditing]=useState(false);
   const [newName,setNewName]=useState(username);
   const [saving,setSaving]=useState(false);
   const [err,setErr]=useState("");
+  const avatarInputRef=useRef(null);
 
   const handleSaveName=async()=>{
     if(!newName.trim())return;
@@ -368,8 +383,12 @@ function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout
     <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0,overflowY:"auto"}}>
       <div style={{padding:"20px 16px",borderBottom:`1px solid ${C.border}`,background:C.panel,flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:16}}>
-          <div style={{width:52,height:52,borderRadius:"50%",background:`linear-gradient(135deg,${C.accent},${C.point})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:700,color:C.bg,flexShrink:0}}>
-            {username?.[0]?.toUpperCase()||"?"}
+          <div style={{position:"relative",flexShrink:0,cursor:"pointer"}} onClick={()=>avatarInputRef.current?.click()}>
+            <Avatar url={avatarUrl} name={username} size={52}/>
+            <div style={{position:"absolute",bottom:0,right:0,width:18,height:18,borderRadius:"50%",background:C.accent,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,border:`2px solid ${C.bg}`}}>
+              📷
+            </div>
+            <input ref={avatarInputRef} type="file" accept="image/*" onChange={onAvatarUpload} style={{display:"none"}}/>
           </div>
           <div style={{flex:1,minWidth:0}}>
             {!editing?(
@@ -401,7 +420,7 @@ function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout
         <div style={{fontSize:9,color:C.textDim,letterSpacing:"0.2em"}}>MY SESSIONS</div>
       </div>
       {sessions.length===0&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:40}}>まだ投稿がありません</div>}
-      {sessions.map(s=><SessionCard key={s.id} s={s} isOwn onDelete={onDelete} onEdit={onEdit}/>)}
+      {sessions.map(s=><SessionCard key={s.id} s={s} isOwn onDelete={onDelete} onEdit={onEdit} avatarUrl={avatarUrl}/>)}
     </div>
   );
 }
@@ -483,6 +502,7 @@ export default function App() {
   const [mySessions,setMySessions]=useState([]);
   const [feedLoading,setFeedLoading]=useState(true);
   const [editingSession,setEditingSession]=useState(null);
+  const [profileMap,setProfileMap]=useState({});
   const [authUser,setAuthUser]=useState(null);
   const [authReady,setAuthReady]=useState(false);
   const [profileUsername,setProfileUsername]=useState(null);
@@ -520,9 +540,15 @@ export default function App() {
   useEffect(()=>{
     if(!authUser){setProfileUsername(null);setProfileLoading(false);return;}
     setProfileLoading(true);
-    supabase.from("profiles").select("username").eq("id",authUser.id).single()
+    supabase.from("profiles").select("id,username,avatar_url")
       .then(({data})=>{
-        setProfileUsername(data?.username||null);
+        if(data){
+          const myProfile=data.find(p=>p.id===authUser.id);
+          setProfileUsername(myProfile?.username||null);
+          const map={};
+          data.forEach(p=>{map[p.id]=p.avatar_url||null;});
+          setProfileMap(map);
+        }
         setProfileLoading(false);
       });
   },[authUser]);
@@ -723,6 +749,36 @@ export default function App() {
     setPage("feed");
   };
 
+  const handleAvatarUpload=async(e)=>{
+    const file=e.target.files?.[0];
+    if(!file)return;
+    const uid=authUser.id;
+    const compressAvatar=f=>new Promise(resolve=>{
+      const img=new Image();
+      const url=URL.createObjectURL(f);
+      img.onload=()=>{
+        URL.revokeObjectURL(url);
+        const s=Math.min(img.naturalWidth,img.naturalHeight);
+        const size=Math.min(400,s);
+        const c=document.createElement("canvas");
+        c.width=size;c.height=size;
+        const ox=(img.naturalWidth-s)/2,oy=(img.naturalHeight-s)/2;
+        c.getContext("2d").drawImage(img,ox,oy,s,s,0,0,size,size);
+        c.toBlob(resolve,"image/jpeg",0.85);
+      };
+      img.src=url;
+    });
+    const compressed=await compressAvatar(file);
+    const path=`avatars/${uid}.jpg`;
+    const{error}=await supabase.storage.from("sail-images").upload(path,compressed,{upsert:true});
+    if(error){alert("アップロードに失敗しました");return;}
+    const{data:{publicUrl}}=supabase.storage.from("sail-images").getPublicUrl(path);
+    const avatarUrl=publicUrl+"?t="+Date.now();
+    await supabase.from("profiles").update({avatar_url:avatarUrl}).eq("id",uid);
+    setProfileMap(prev=>({...prev,[uid]:avatarUrl}));
+    e.target.value="";
+  };
+
   const handleEditSave=(updated)=>{
     setFeedSessions(prev=>prev.map(s=>s.id===updated.id?updated:s));
     setMySessions(prev=>prev.map(s=>s.id===updated.id?updated:s));
@@ -783,7 +839,7 @@ export default function App() {
       {/* コンテンツ */}
       <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
 
-        {page==="feed"&&<FeedPage sessions={feedSessions} loading={feedLoading} myUserId={authUser.id} onDelete={handleDelete} onEdit={setEditingSession}/>}
+        {page==="feed"&&<FeedPage sessions={feedSessions} loading={feedLoading} myUserId={authUser.id} onDelete={handleDelete} onEdit={setEditingSession} profileMap={profileMap}/>}
 
         {page==="analyze"&&(
           <>
@@ -905,6 +961,8 @@ export default function App() {
             onExport={()=>exportCSV(mySessions)}
             onDelete={handleDelete}
             onEdit={setEditingSession}
+            avatarUrl={profileMap[authUser.id]}
+            onAvatarUpload={handleAvatarUpload}
           />
         )}
       </div>
