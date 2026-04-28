@@ -770,6 +770,15 @@ export default function App() {
     });
     const compressed=await compressAvatar(file);
     if(!compressed){alert("画像の圧縮に失敗しました");return;}
+    const oldUrl=profileMap[uid];
+    if(oldUrl){
+      const marker="/sail-images/";
+      const idx=oldUrl.indexOf(marker);
+      if(idx>=0){
+        const oldPath=oldUrl.slice(idx+marker.length).split("?")[0];
+        await supabase.storage.from("sail-images").remove([oldPath]);
+      }
+    }
     const path=`avatars/${uid}_${Date.now()}.jpg`;
     const{error}=await supabase.storage.from("sail-images").upload(path,compressed);
     if(error){console.error("Storage error:",error);alert("アップロードに失敗しました\n"+error.message);return;}
