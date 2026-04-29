@@ -1,6 +1,6 @@
 # LEECH ANALYZER 開発メモ
 
-最終更新: 2026-04-28
+最終更新: 2026-04-29
 
 ---
 
@@ -8,6 +8,9 @@
 
 | 日付 | 内容 |
 |------|------|
+| 2026-04-29 | 初回オンボーディング画面追加・絵文字→lucide-react SVGアイコン置き換え（v1.8） |
+| 2026-04-29 | アカウント削除機能・設定をボトムシートメニューに統合（v1.7） |
+| 2026-04-28 | シェア機能・いいね・コメント・返信機能を追加（v1.6） |
 | 2026-04-28 | プロフィールアイコン追加・投稿編集・削除機能（v1.5） |
 | 2026-04-28 | フィード・マイページ・初回ユーザー名設定・ライト/ダークモード（v1.3〜1.4） |
 | 2026-04-27 | Supabase Storage対応・元画像＋アノテーション画像の2枚保存（v1.2） |
@@ -31,7 +34,7 @@
 - **Vercel URL**: `https://leech-analyzer.vercel.app`
 - **GitHub**: `https://github.com/takuji4881/leech-analyzer`
 
-### 実装済み機能 (v1.5)
+### 実装済み機能 (v1.8)
 - 写真アップロード・canvasレンダリング
 - マスト分割ガイドライン（0% / 25% / 50% / 75% / 100%）+ スナップ機能
 - リーチトレースによる数値化（Draft Position・Max Draft・Twist）
@@ -41,13 +44,19 @@
 - CSVエクスポート
 - Supabase Auth — ログイン・新規登録
 - Supabase Storage — 元画像＋アノテーション画像の2枚をクラウド保存（ML用）
-- **ライト/ダークモード切り替え（v1.3で追加）**
-- **3ページ構成: フィード（全員の投稿）・投稿・マイページ（v1.3で追加）**
-- **初回ログイン時のユーザー名セットアップ画面（v1.3で追加）**
-- **ボトムナビゲーション（v1.3で追加）**
-- **コメントの「続きを読む」展開（v1.4で追加）**
-- **投稿の編集機能・削除機能（v1.4で追加）**
-- **プロフィールアイコン登録・投稿への表示・更新時の古いファイル自動削除（v1.5で追加）**
+- ライト/ダークモード切り替え（v1.3で追加）
+- 3ページ構成: フィード（全員の投稿）・投稿・マイページ（v1.3で追加）
+- 初回ログイン時のユーザー名セットアップ画面（v1.3で追加）
+- ボトムナビゲーション（v1.3で追加）
+- コメントの「続きを読む」展開（v1.4で追加）
+- 投稿の編集機能・削除機能（v1.4で追加）
+- プロフィールアイコン登録・投稿への表示・更新時の古いファイル自動削除（v1.5で追加）
+- **いいね・コメント・返信機能（v1.6で追加）**
+- **シェア機能（Web Share API / クリップボードコピー）（v1.6で追加）**
+- **アカウント削除機能（DB・Storage・auth.users を一括削除）（v1.7で追加）**
+- **設定をボトムシートメニューに統合（v1.7で追加）**
+- **絵文字UIアイコンを lucide-react SVGアイコンに統一（v1.8で追加）**
+- **初回オンボーディング画面（各指標の説明・使い方）・ヘッダーから再表示可能（v1.8で追加）**
 
 ---
 
@@ -59,6 +68,7 @@
 DB: Supabase (PostgreSQL)
 認証: Supabase Auth（メール＋パスワード）
 画像ストレージ: Supabase Storage（バケット: sail-images）
+UIアイコン: lucide-react
 ```
 
 ---
@@ -127,6 +137,67 @@ create policy "own insert" on profiles
   for insert with check (auth.uid() = id);
 create policy "own update" on profiles
   for update using (auth.uid() = id);
+```
+
+### テーブル: likes（v1.6で追加）
+
+```sql
+create table likes (
+  id bigint generated always as identity primary key,
+  session_id bigint references sessions(id) on delete cascade,
+  user_id uuid references auth.users(id),
+  created_at timestamp with time zone default now(),
+  unique(session_id, user_id)
+);
+
+alter table likes enable row level security;
+create policy "auth read likes" on likes for select using (auth.uid() is not null);
+create policy "own insert like" on likes for insert with check (auth.uid() = user_id);
+create policy "own delete like" on likes for delete using (auth.uid() = user_id);
+```
+
+### テーブル: comments（v1.6で追加）
+
+```sql
+create table comments (
+  id bigint generated always as identity primary key,
+  session_id bigint references sessions(id) on delete cascade,
+  user_id uuid references auth.users(id),
+  user_name text,
+  avatar_url text,
+  body text not null,
+  parent_id bigint references comments(id) on delete cascade,  -- nullなら最上位、非nullなら返信
+  created_at timestamp with time zone default now()
+);
+
+alter table comments enable row level security;
+create policy "auth read comments" on comments for select using (auth.uid() is not null);
+create policy "own insert comment" on comments for insert with check (auth.uid() = user_id);
+create policy "own delete comment" on comments for delete using (auth.uid() = user_id);
+```
+
+### RPC: delete_user（v1.7で追加）
+
+アカウント削除時にDBデータとauth.usersを一括削除するサーバー関数。
+
+```sql
+create or replace function public.delete_user()
+returns void
+language plpgsql
+security definer
+as $$
+begin
+  delete from public.likes
+    where session_id in (select id from public.sessions where user_id = auth.uid());
+  delete from public.comments
+    where session_id in (select id from public.sessions where user_id = auth.uid());
+  delete from public.likes where user_id = auth.uid();
+  delete from public.comments where user_id = auth.uid();
+  delete from public.sessions where user_id = auth.uid();
+  delete from public.profiles where id = auth.uid();
+  delete from auth.users where id = auth.uid();
+end;
+$$;
 ```
 
 ### Storage: sail-images
