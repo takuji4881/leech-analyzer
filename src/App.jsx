@@ -23,6 +23,7 @@ let C = THEMES.dark;
 const DIVISIONS = [0, 25, 50, 75, 100];
 const SNAP_THRESHOLD = 40;
 const ONBOARDING_KEY = "leech_onboarding_v1";
+const ADMIN_EMAIL = "nasaxajtakuji0930@gmail.com";
 
 function getGuideY(top, bot, pct) {
   return { x: top.x + (bot.x - top.x) * pct / 100, y: top.y + (bot.y - top.y) * pct / 100 };
@@ -211,7 +212,7 @@ function Avatar({url,name,size=34}){
   );
 }
 
-function SessionCard({s,isOwn,onDelete,onEdit,avatarUrl,me}){
+function SessionCard({s,isOwn,isAdmin,onDelete,onEdit,avatarUrl,me}){
   const [expanded,setExpanded]=useState(false);
   const [showMenu,setShowMenu]=useState(false);
   const [confirming,setConfirming]=useState(false);
@@ -323,20 +324,20 @@ function SessionCard({s,isOwn,onDelete,onEdit,avatarUrl,me}){
         </div>
         <div style={{display:"flex",alignItems:"center",gap:8,position:"relative"}}>
           <div style={{fontSize:10,color:C.textDim}}>{s.cond?.date}{s.cond?.location&&` · ${s.cond.location}`}</div>
-          {isOwn&&(
+          {(isOwn||isAdmin)&&(
             <>
               <button onClick={()=>{setShowMenu(m=>!m);setConfirming(false);}}
                 style={{background:"none",border:"none",color:C.textDim,cursor:"pointer",padding:"0 4px",display:"flex",alignItems:"center"}}>
           <MoreVertical size={18} strokeWidth={1.8}/></button>
               {showMenu&&(
                 <div style={{position:"absolute",top:24,right:0,background:C.panel,border:`1px solid ${C.border}`,borderRadius:6,zIndex:10,minWidth:110,boxShadow:"0 4px 16px rgba(0,0,0,0.3)",overflow:"hidden"}}>
-                  <button onClick={()=>{onEdit(s);setShowMenu(false);}}
+                  {isOwn&&<><button onClick={()=>{onEdit(s);setShowMenu(false);}}
                     style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"10px 16px",background:"none",border:"none",color:C.text,fontSize:12,fontFamily:"inherit",textAlign:"left",cursor:"pointer"}}>
                     <Pencil size={14} strokeWidth={1.8}/>編集する</button>
-                  <div style={{height:1,background:C.border}}/>
+                  <div style={{height:1,background:C.border}}/></>}
                   <button onClick={()=>{setConfirming(true);setShowMenu(false);}}
                     style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"10px 16px",background:"none",border:"none",color:"#ff6b6b",fontSize:12,fontFamily:"inherit",textAlign:"left",cursor:"pointer"}}>
-                    <Trash2 size={14} strokeWidth={1.8}/>削除する</button>
+                    <Trash2 size={14} strokeWidth={1.8}/>{isOwn?"削除する":"削除する（管理者）"}</button>
                 </div>
               )}
             </>
@@ -522,7 +523,7 @@ function DeleteAccountModal({onConfirm,onClose}){
   );
 }
 
-function FeedPage({sessions,loading,myUserId,onDelete,onEdit,profileMap,me}){
+function FeedPage({sessions,loading,myUserId,isAdmin,onDelete,onEdit,profileMap,me}){
   const [search,setSearch]=useState("");
   const [showFilter,setShowFilter]=useState(false);
   const [fWind,setFWind]=useState("");
@@ -561,7 +562,7 @@ function FeedPage({sessions,loading,myUserId,onDelete,onEdit,profileMap,me}){
       <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
         {loading&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:60}}>読み込み中...</div>}
         {!loading&&filtered.length===0&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:60}}>まだ投稿がありません</div>}
-        {filtered.map(s=><SessionCard key={s.id} s={s} isOwn={s.userId===myUserId} onDelete={onDelete} onEdit={onEdit} avatarUrl={profileMap?.[s.userId]} me={me}/>)}
+        {filtered.map(s=><SessionCard key={s.id} s={s} isOwn={s.userId===myUserId} isAdmin={isAdmin} onDelete={onDelete} onEdit={onEdit} avatarUrl={profileMap?.[s.userId]} me={me}/>)}
       </div>
     </div>
   );
@@ -1270,7 +1271,7 @@ export default function App() {
       {/* コンテンツ */}
       <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
 
-        {page==="feed"&&<FeedPage sessions={feedSessions} loading={feedLoading} myUserId={authUser.id} onDelete={handleDelete} onEdit={setEditingSession} profileMap={profileMap} me={me}/>}
+        {page==="feed"&&<FeedPage sessions={feedSessions} loading={feedLoading} myUserId={authUser.id} isAdmin={authUser.email===ADMIN_EMAIL} onDelete={handleDelete} onEdit={setEditingSession} profileMap={profileMap} me={me}/>}
 
         {page==="analyze"&&(
           <>
