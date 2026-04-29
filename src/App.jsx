@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "./supabase";
-import { Heart, MessageCircle, Share2, Settings, X, Camera, Home, Plus, User, Pencil, Trash2, LogOut, Download, Sun, Moon, Check, MoreVertical } from "lucide-react";
+import { Heart, MessageCircle, Share2, Settings, X, Camera, Home, Plus, User, Pencil, Trash2, LogOut, Download, Sun, Moon, Check, MoreVertical, Info } from "lucide-react";
 
 const THEMES = {
   dark: {
@@ -22,6 +22,7 @@ let C = THEMES.dark;
 
 const DIVISIONS = [0, 25, 50, 75, 100];
 const SNAP_THRESHOLD = 40;
+const ONBOARDING_KEY = "leech_onboarding_v1";
 
 function getGuideY(top, bot, pct) {
   return { x: top.x + (bot.x - top.x) * pct / 100, y: top.y + (bot.y - top.y) * pct / 100 };
@@ -725,6 +726,165 @@ function ConditionsForm({cond,setCond,onDone,metrics,saveLabel="SAVE & FINISH"})
   );
 }
 
+function OnboardingScreen({onDone}){
+  const [step,setStep]=useState(0);
+
+  const slides=[
+    {
+      title:"LEECH ANALYZER",
+      sub:"CONCEPT",
+      body:"帆の後縁（リーチ）を写真でトレースし、形状を3つの数値で記録するアプリ。\n\nコンディションと紐づけて蓄積することで、「あのときのセッティング」を再現しやすくなります。",
+      diagram:(
+        <svg viewBox="0 0 160 140" width="150" height="131" style={{display:"block",margin:"0 auto"}}>
+          <line x1="22" y1="10" x2="22" y2="128" stroke={C.border} strokeWidth="2"/>
+          <line x1="22" y1="128" x2="138" y2="128" stroke={C.border} strokeWidth="2"/>
+          <path d="M22,10 Q135,10 138,10 Q152,55 145,90 Q138,118 138,128" stroke={C.accent} strokeWidth="2.5" fill="none"/>
+          <path d="M22,10 L138,10 Q152,55 145,90 Q138,118 138,128 L22,128 Z" fill="rgba(0,200,255,0.05)"/>
+          {[[138,10],[149,55],[147,88],[140,112],[138,128]].map(([cx,cy],i)=>(
+            <circle key={i} cx={cx} cy={cy} r={i===0||i===4?4:3} fill={i===0?C.point:i===4?C.line:C.accent}/>
+          ))}
+          <text x="4" y="14" fill={C.point} fontSize="8" fontFamily="monospace">TOP</text>
+          <text x="118" y="142" fill={C.line} fontSize="8" fontFamily="monospace">BOT</text>
+          <text x="155" y="68" fill={C.accent} fontSize="8" fontFamily="monospace" writingMode="tb">LEECH</text>
+        </svg>
+      ),
+    },
+    {
+      title:"DRAFT POSITION",
+      sub:"ドラフト位置 (%)",
+      body:"マストトップ（0%）とブームエンドを結ぶ直線（コード）上で、リーチのたわみが最も大きくなる点が何%の位置にあるか。\n\n前寄り → パワー型セール\n後ろ寄り → スピード型セール",
+      diagram:(
+        <svg viewBox="0 0 180 150" width="180" height="150" style={{display:"block",margin:"0 auto"}}>
+          <line x1="38" y1="10" x2="38" y2="140" stroke={C.border} strokeWidth="1.5" strokeDasharray="4,3"/>
+          <path d="M38,10 Q105,28 112,62 Q105,98 38,140" stroke={C.accent} strokeWidth="2" fill="none"/>
+          <circle cx="38" cy="10" r="4" fill={C.point}/>
+          <circle cx="38" cy="140" r="4" fill={C.line}/>
+          <circle cx="112" cy="62" r="4" fill={C.accent}/>
+          <line x1="38" y1="62" x2="112" y2="62" stroke={C.line} strokeWidth="1.5" strokeDasharray="3,2"/>
+          <circle cx="38" cy="62" r="3" fill={C.line}/>
+          <line x1="28" y1="10" x2="28" y2="62" stroke={C.accentDim} strokeWidth="2"/>
+          <line x1="24" y1="10" x2="32" y2="10" stroke={C.accentDim} strokeWidth="1.5"/>
+          <line x1="24" y1="62" x2="32" y2="62" stroke={C.accentDim} strokeWidth="1.5"/>
+          <text x="2" y="40" fill={C.accentDim} fontSize="7" fontFamily="monospace">DRAFT</text>
+          <text x="3" y="48" fill={C.accentDim} fontSize="7" fontFamily="monospace">POS</text>
+          <text x="42" y="14" fill={C.point} fontSize="8" fontFamily="monospace">TOP 0%</text>
+          <text x="42" y="143" fill={C.line} fontSize="8" fontFamily="monospace">BOT 100%</text>
+          <text x="115" y="58" fill={C.accent} fontSize="7.5" fontFamily="monospace">最大</text>
+          <text x="115" y="67" fill={C.accent} fontSize="7.5" fontFamily="monospace">たわみ点</text>
+        </svg>
+      ),
+    },
+    {
+      title:"MAX DRAFT",
+      sub:"最大ドラフト (%)",
+      body:"コードの長さを100%としたとき、リーチの最大たわみがどれだけ深いかを表す比率。\n\n深い → 丸みが大きくパワフル\n浅い → フラットでスピード重視",
+      diagram:(
+        <svg viewBox="0 0 180 150" width="180" height="150" style={{display:"block",margin:"0 auto"}}>
+          <line x1="38" y1="10" x2="38" y2="140" stroke={C.border} strokeWidth="1.5" strokeDasharray="4,3"/>
+          <path d="M38,10 Q105,28 112,62 Q105,98 38,140" stroke={C.accent} strokeWidth="2" fill="none"/>
+          <circle cx="38" cy="10" r="4" fill={C.point}/>
+          <circle cx="38" cy="140" r="4" fill={C.line}/>
+          <circle cx="112" cy="62" r="4" fill={C.accent}/>
+          <line x1="52" y1="10" x2="52" y2="140" stroke={C.textDim} strokeWidth="1" strokeDasharray="2,2"/>
+          <line x1="48" y1="10" x2="56" y2="10" stroke={C.textDim} strokeWidth="1"/>
+          <line x1="48" y1="140" x2="56" y2="140" stroke={C.textDim} strokeWidth="1"/>
+          <text x="58" y="82" fill={C.textDim} fontSize="7.5" fontFamily="monospace">コード長</text>
+          <text x="58" y="91" fill={C.textDim} fontSize="7.5" fontFamily="monospace">= 100%</text>
+          <line x1="38" y1="62" x2="112" y2="62" stroke={C.line} strokeWidth="2"/>
+          <line x1="38" y1="59" x2="38" y2="65" stroke={C.line} strokeWidth="2"/>
+          <line x1="112" y1="59" x2="112" y2="65" stroke={C.line} strokeWidth="2"/>
+          <text x="42" y="56" fill={C.line} fontSize="8" fontFamily="monospace">MAX DRAFT</text>
+          <text x="42" y="65" fill={C.line} fontSize="7" fontFamily="monospace">= この距離 ÷ コード長</text>
+          <text x="42" y="14" fill={C.point} fontSize="8" fontFamily="monospace">TOP</text>
+          <text x="42" y="143" fill={C.line} fontSize="8" fontFamily="monospace">BOT</text>
+        </svg>
+      ),
+    },
+    {
+      title:"TWIST",
+      sub:"ツイスト (°)",
+      body:"リーチの上端と下端の向きの角度差。上端がどれだけ風下に開いているかを表す。\n\n大きい → 上端が開く（パワーが逃げる）\n小さい → 上端が立つ（ヒールしやすい）",
+      diagram:(
+        <svg viewBox="0 0 180 150" width="180" height="150" style={{display:"block",margin:"0 auto"}}>
+          <path d="M38,10 Q105,28 112,62 Q105,98 38,140" stroke={C.border} strokeWidth="1.5" fill="none" strokeDasharray="4,3"/>
+          <circle cx="38" cy="10" r="4" fill={C.point}/>
+          <circle cx="38" cy="140" r="4" fill={C.line}/>
+          <line x1="38" y1="10" x2="100" y2="32" stroke={C.accent} strokeWidth="2.5"/>
+          <polygon points="100,32 88,25 90,35" fill={C.accent}/>
+          <line x1="38" y1="140" x2="102" y2="112" stroke={C.point} strokeWidth="2.5"/>
+          <polygon points="102,112 90,118 91,108" fill={C.point}/>
+          <path d="M68,36 Q88,72 70,108" stroke={C.line} strokeWidth="1.5" fill="none" strokeDasharray="3,2"/>
+          <text x="104" y="30" fill={C.accent} fontSize="8" fontFamily="monospace">上端方向</text>
+          <text x="104" y="115" fill={C.point} fontSize="8" fontFamily="monospace">下端方向</text>
+          <text x="88" y="78" fill={C.line} fontSize="9" fontFamily="monospace">TWIST</text>
+          <text x="88" y="88" fill={C.line} fontSize="8" fontFamily="monospace">= 角度差</text>
+        </svg>
+      ),
+    },
+    {
+      title:"HOW TO USE",
+      sub:"使い方",
+      body:null,
+      steps:[
+        "セールの写真をアップロード",
+        "マストトップをタップ → TOP を設定",
+        "ブームエンドをタップ → BOT を設定",
+        "ガイドに合わせてリーチを 3 点トレース（25% · 50% · 75%）",
+        "ANALYZE → コンディションを記録して保存",
+      ],
+    },
+  ];
+
+  const s=slides[step];
+  const isLast=step===slides.length-1;
+
+  return(
+    <div style={{height:"100vh",background:C.bg,color:C.text,fontFamily:"'DM Mono','Courier New',monospace",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div style={{padding:"12px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+        <div style={{fontSize:10,color:C.textDim,letterSpacing:"0.12em"}}>{step+1} / {slides.length}</div>
+        <button onClick={onDone} style={{background:"none",border:"none",color:C.textDim,fontSize:11,fontFamily:"inherit",cursor:"pointer",letterSpacing:"0.08em"}}>スキップ</button>
+      </div>
+      <div style={{display:"flex",justifyContent:"center",gap:6,flexShrink:0,paddingBottom:10}}>
+        {slides.map((_,i)=>(
+          <div key={i} style={{height:4,borderRadius:2,background:i<=step?C.accent:C.border,width:i===step?24:8,transition:"all 0.25s"}}/>
+        ))}
+      </div>
+      <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:"0 24px"}}>
+        <div style={{maxWidth:400,margin:"0 auto",display:"flex",flexDirection:"column",alignItems:"center",gap:16,paddingBottom:24}}>
+          {s.diagram&&(
+            <div style={{background:`rgba(0,200,255,0.03)`,border:`1px solid ${C.border}`,borderRadius:10,padding:"14px 8px",width:"100%",display:"flex",justifyContent:"center"}}>
+              {s.diagram}
+            </div>
+          )}
+          <div style={{textAlign:"center",width:"100%"}}>
+            <div style={{fontSize:16,fontWeight:700,letterSpacing:"0.12em",color:C.accent}}>{s.title}</div>
+            <div style={{fontSize:9,color:C.textDim,letterSpacing:"0.2em",marginTop:4}}>{s.sub}</div>
+          </div>
+          {s.body&&(
+            <div style={{fontSize:12,color:C.text,lineHeight:2,width:"100%",borderLeft:`2px solid ${C.accentDim}`,paddingLeft:12,whiteSpace:"pre-line"}}>{s.body}</div>
+          )}
+          {s.steps&&(
+            <div style={{display:"flex",flexDirection:"column",gap:12,width:"100%"}}>
+              {s.steps.map((text,i)=>(
+                <div key={i} style={{display:"flex",gap:12,alignItems:"flex-start"}}>
+                  <div style={{width:22,height:22,borderRadius:"50%",background:C.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:C.bg,fontWeight:700,flexShrink:0}}>{i+1}</div>
+                  <div style={{fontSize:12,color:C.text,lineHeight:1.8,flex:1,paddingTop:2}}>{text}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      <div style={{padding:"12px 24px 28px",flexShrink:0,borderTop:`1px solid ${C.border}`,background:C.panel}}>
+        <button onClick={isLast?onDone:()=>setStep(s=>s+1)}
+          style={{width:"100%",background:C.accent,color:C.bg,border:"none",borderRadius:6,padding:"12px",fontSize:12,fontFamily:"inherit",fontWeight:700,letterSpacing:"0.12em",cursor:"pointer"}}>
+          {isLast?"はじめる →":"次へ →"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [page,setPage]=useState("feed");
   const [imgObj,setImgObj]=useState(null);
@@ -744,6 +904,7 @@ export default function App() {
   const [profileLoading,setProfileLoading]=useState(true);
   const [theme,setTheme]=useState(()=>localStorage.getItem("leech_theme")||"dark");
   const [isMobile,setIsMobile]=useState(window.innerWidth<640);
+  const [showOnboarding,setShowOnboarding]=useState(false);
   C=THEMES[theme];
 
   const canvasRef=useRef(null);
@@ -1074,7 +1235,9 @@ export default function App() {
   if(!authReady||profileLoading)
     return <div style={{height:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{color:C.textDim,fontSize:11,letterSpacing:"0.15em"}}>LOADING...</div></div>;
   if(!authUser) return <AuthScreen onAuth={u=>setAuthUser(u)}/>;
-  if(profileUsername===null) return <SetupScreen onDone={name=>setProfileUsername(name)}/>;
+  if(profileUsername===null) return <SetupScreen onDone={name=>{setProfileUsername(name);if(!localStorage.getItem(ONBOARDING_KEY))setShowOnboarding(true);}}/>;
+  if(showOnboarding) return <OnboardingScreen onDone={()=>{localStorage.setItem(ONBOARDING_KEY,"1");setShowOnboarding(false);}}/>;
+
 
   const me={id:authUser.id,username:profileUsername,avatarUrl:profileMap[authUser.id]||null};
 
@@ -1096,7 +1259,12 @@ export default function App() {
           <div style={{fontSize:12,fontWeight:700,letterSpacing:"0.12em",color:C.accent}}>LEECH ANALYZER</div>
           <div style={{fontSize:8,color:C.textDim,letterSpacing:"0.18em"}}>SAIL SHAPE v1.3</div>
         </div>
-        <div style={{marginLeft:"auto",fontSize:11,color:C.point,fontWeight:700,letterSpacing:"0.06em"}}>{profileUsername}</div>
+        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:10}}>
+          <div style={{fontSize:11,color:C.point,fontWeight:700,letterSpacing:"0.06em"}}>{profileUsername}</div>
+          <button onClick={()=>setShowOnboarding(true)} style={{background:"none",border:"none",color:C.textDim,cursor:"pointer",padding:0,display:"flex",alignItems:"center"}}>
+            <Info size={16} strokeWidth={1.8}/>
+          </button>
+        </div>
       </div>
 
       {/* コンテンツ */}
