@@ -753,7 +753,7 @@ function OnboardingScreen({onDone}){
     {
       title:"DRAFT POSITION",
       sub:"ドラフト位置 (%)",
-      body:"マストトップ（0%）とブームエンドを結ぶ直線（コード）上で、リーチのたわみが最も大きくなる点が何%の位置にあるか。\n\n前寄り → パワー型セール\n後ろ寄り → スピード型セール",
+      body:"マストトップ（0%）からブームエンド（100%）の間で、リーチのたわみが最大になる点がどの高さにあるかを示す。\n\n上寄り（マストトップ側）→ パワー型セール\n下寄り（ブームエンド側）→ スピード型セール",
       diagram:(
         <svg viewBox="0 0 180 150" width="180" height="150" style={{display:"block",margin:"0 auto"}}>
           <line x1="38" y1="10" x2="38" y2="140" stroke={C.border} strokeWidth="1.5" strokeDasharray="4,3"/>
@@ -766,12 +766,11 @@ function OnboardingScreen({onDone}){
           <line x1="28" y1="10" x2="28" y2="62" stroke={C.accentDim} strokeWidth="2"/>
           <line x1="24" y1="10" x2="32" y2="10" stroke={C.accentDim} strokeWidth="1.5"/>
           <line x1="24" y1="62" x2="32" y2="62" stroke={C.accentDim} strokeWidth="1.5"/>
-          <text x="2" y="40" fill={C.accentDim} fontSize="7" fontFamily="monospace">DRAFT</text>
-          <text x="3" y="48" fill={C.accentDim} fontSize="7" fontFamily="monospace">POS</text>
+          <text x="2" y="38" fill={C.accentDim} fontSize="6.5" fontFamily="monospace">DRAFT POS</text>
           <text x="42" y="14" fill={C.point} fontSize="8" fontFamily="monospace">TOP 0%</text>
           <text x="42" y="143" fill={C.line} fontSize="8" fontFamily="monospace">BOT 100%</text>
-          <text x="115" y="58" fill={C.accent} fontSize="7.5" fontFamily="monospace">最大</text>
-          <text x="115" y="67" fill={C.accent} fontSize="7.5" fontFamily="monospace">たわみ点</text>
+          <text x="120" y="58" fill={C.accent} fontSize="7.5" fontFamily="monospace">最大</text>
+          <text x="120" y="67" fill={C.accent} fontSize="7.5" fontFamily="monospace">たわみ点</text>
         </svg>
       ),
     },
@@ -789,13 +788,12 @@ function OnboardingScreen({onDone}){
           <line x1="52" y1="10" x2="52" y2="140" stroke={C.textDim} strokeWidth="1" strokeDasharray="2,2"/>
           <line x1="48" y1="10" x2="56" y2="10" stroke={C.textDim} strokeWidth="1"/>
           <line x1="48" y1="140" x2="56" y2="140" stroke={C.textDim} strokeWidth="1"/>
-          <text x="58" y="82" fill={C.textDim} fontSize="7.5" fontFamily="monospace">コード長</text>
-          <text x="58" y="91" fill={C.textDim} fontSize="7.5" fontFamily="monospace">= 100%</text>
           <line x1="38" y1="62" x2="112" y2="62" stroke={C.line} strokeWidth="2"/>
           <line x1="38" y1="59" x2="38" y2="65" stroke={C.line} strokeWidth="2"/>
           <line x1="112" y1="59" x2="112" y2="65" stroke={C.line} strokeWidth="2"/>
-          <text x="42" y="56" fill={C.line} fontSize="8" fontFamily="monospace">MAX DRAFT</text>
-          <text x="42" y="65" fill={C.line} fontSize="7" fontFamily="monospace">= この距離 ÷ コード長</text>
+          <text x="42" y="53" fill={C.line} fontSize="7" fontFamily="monospace">MAX DRAFT</text>
+          <text x="42" y="74" fill={C.line} fontSize="6.5" fontFamily="monospace">この距離</text>
+          <text x="57" y="91" fill={C.textDim} fontSize="6.5" fontFamily="monospace">コード長 = 100%</text>
           <text x="42" y="14" fill={C.point} fontSize="8" fontFamily="monospace">TOP</text>
           <text x="42" y="143" fill={C.line} fontSize="8" fontFamily="monospace">BOT</text>
         </svg>
