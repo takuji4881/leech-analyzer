@@ -96,6 +96,18 @@ function Field({label,children}) {
 function TextIn({value,onChange,placeholder}) {
   return <input value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder||"—"} style={{background:"rgba(255,255,255,0.04)",border:`1px solid ${C.border}`,borderRadius:4,padding:"6px 9px",color:C.text,fontSize:11,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"}}/>;
 }
+const BOAT_CLASSES=["470","SNIPE","420","FJ","Laser / ILCA 7","Laser Radial / ILCA 6","Laser 4.7 / ILCA 4","49er","29er","Finn","OK","Optimist","RS:X","J/24","505"];
+function BoatClassIn({value,onChange}){
+  return(
+    <>
+      <input value={value} onChange={e=>onChange(e.target.value)} list="boat-class-list" placeholder="艇種を選択 or 入力"
+        style={{background:"rgba(255,255,255,0.04)",border:`1px solid ${C.border}`,borderRadius:4,padding:"6px 9px",color:C.text,fontSize:11,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"}}/>
+      <datalist id="boat-class-list">
+        {BOAT_CLASSES.map(b=><option key={b} value={b}/>)}
+      </datalist>
+    </>
+  );
+}
 function Btn({children,onClick,disabled,secondary,style:sx}){
   return <button onClick={onClick} disabled={disabled} style={{background:secondary?"transparent":disabled?"#1a2a3a":C.accent,color:secondary?C.textDim:disabled?C.textDim:C.bg,border:`1px solid ${secondary?C.border:disabled?"#1a2a3a":C.accent}`,padding:"6px 12px",fontSize:11,fontFamily:"inherit",letterSpacing:"0.1em",cursor:disabled?"not-allowed":"pointer",borderRadius:4,fontWeight:700,whiteSpace:"nowrap",...sx}}>{children}</button>;
 }
@@ -675,7 +687,7 @@ function ConditionsForm({cond,setCond,onDone,metrics,saveLabel="SAVE & FINISH"})
         </div>
       )}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <Field label="艇種"><TextIn value={cond.boatClass} onChange={set("boatClass")} placeholder="470, Laser..."/></Field>
+        <Field label="艇種"><BoatClassIn value={cond.boatClass} onChange={set("boatClass")}/></Field>
         <Field label="艇番"><TextIn value={cond.sailNumber} onChange={set("sailNumber")} placeholder="1234"/></Field>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
