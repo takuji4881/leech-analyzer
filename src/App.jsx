@@ -108,6 +108,17 @@ function BoatClassIn({value,onChange}){
     </>
   );
 }
+function LocationIn({value,onChange,pastLocations=[]}){
+  return(
+    <>
+      <input value={value} onChange={e=>onChange(e.target.value)} list="location-list" placeholder="江の島, 琵琶湖..."
+        style={{background:"rgba(255,255,255,0.04)",border:`1px solid ${C.border}`,borderRadius:4,padding:"6px 9px",color:C.text,fontSize:11,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"}}/>
+      <datalist id="location-list">
+        {pastLocations.map(l=><option key={l} value={l}/>)}
+      </datalist>
+    </>
+  );
+}
 function Btn({children,onClick,disabled,secondary,style:sx}){
   return <button onClick={onClick} disabled={disabled} style={{background:secondary?"transparent":disabled?"#1a2a3a":C.accent,color:secondary?C.textDim:disabled?C.textDim:C.bg,border:`1px solid ${secondary?C.border:disabled?"#1a2a3a":C.accent}`,padding:"6px 12px",fontSize:11,fontFamily:"inherit",letterSpacing:"0.1em",cursor:disabled?"not-allowed":"pointer",borderRadius:4,fontWeight:700,whiteSpace:"nowrap",...sx}}>{children}</button>;
 }
@@ -474,7 +485,7 @@ function SessionCard({s,isOwn,isAdmin,onDelete,onEdit,avatarUrl,me}){
   );
 }
 
-function EditModal({session,onSave,onClose}){
+function EditModal({session,onSave,onClose,pastLocations=[]}){
   const [cond,setCond]=useState({...session.cond});
   const [saving,setSaving]=useState(false);
 
@@ -500,7 +511,7 @@ function EditModal({session,onSave,onClose}){
         <div style={{fontSize:10,color:C.textDim}}>{session.cond?.date}</div>
         <Btn onClick={onClose} secondary style={{padding:"5px 8px",display:"flex",alignItems:"center"}}><X size={14} strokeWidth={1.8}/></Btn>
       </div>
-      <ConditionsForm cond={cond} setCond={setCond} onDone={handleSave} metrics={session.metrics} saveLabel={saving?"保存中...":"保存する ✓"}/>
+      <ConditionsForm cond={cond} setCond={setCond} onDone={handleSave} metrics={session.metrics} pastLocations={pastLocations} saveLabel={saving?"保存中...":"保存する ✓"}/>
     </div>
   );
 }
@@ -674,7 +685,7 @@ function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout
   );
 }
 
-function ConditionsForm({cond,setCond,onDone,metrics,saveLabel="SAVE & FINISH"}){
+function ConditionsForm({cond,setCond,onDone,metrics,pastLocations=[],saveLabel="SAVE & FINISH"}){
   const set = k => v => setCond(prev=>({...prev,[k]:v}));
   const toggle = (k,v) => setCond(prev=>({...prev,[k]:prev[k]===v?"":v}));
   return (
@@ -692,7 +703,7 @@ function ConditionsForm({cond,setCond,onDone,metrics,saveLabel="SAVE & FINISH"})
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <Field label="日付"><input type="date" value={cond.date} onChange={e=>set("date")(e.target.value)} style={{background:"rgba(255,255,255,0.04)",border:`1px solid ${C.border}`,borderRadius:4,padding:"6px 9px",color:C.text,fontSize:11,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"}}/></Field>
-        <Field label="場所"><TextIn value={cond.location} onChange={set("location")} placeholder="江の島, 琵琶湖..."/></Field>
+        <Field label="場所"><LocationIn value={cond.location} onChange={set("location")} pastLocations={pastLocations}/></Field>
       </div>
       <div style={{borderTop:`1px solid ${C.border}`}}/>
       <Field label="風速 (ノット)">
@@ -1309,7 +1320,7 @@ export default function App() {
                   </div>
                 )}
                 {mode==="conditions"&&(
-                  <ConditionsForm cond={cond} setCond={setCond} onDone={handleSave} metrics={metrics}/>
+                  <ConditionsForm cond={cond} setCond={setCond} onDone={handleSave} metrics={metrics} pastLocations={[...new Set(mySessions.map(s=>s.cond?.location).filter(Boolean))]}/>
                 )}
                 {(isCanvasMode||mode==="upload")&&(
                   <div style={{height:52,flexShrink:0,display:"flex",alignItems:"center",gap:8,padding:"0 12px",borderTop:`1px solid ${C.border}`}}>
@@ -1411,7 +1422,7 @@ export default function App() {
         )}
       </div>
 
-      {editingSession&&<EditModal session={editingSession} onSave={handleEditSave} onClose={()=>setEditingSession(null)}/>}
+      {editingSession&&<EditModal session={editingSession} onSave={handleEditSave} onClose={()=>setEditingSession(null)} pastLocations={[...new Set(mySessions.map(s=>s.cond?.location).filter(Boolean))]}/>}
 
       {/* ボトムナビ */}
       <div style={{height:56,flexShrink:0,borderTop:`1px solid ${C.border}`,background:C.panel,display:"flex",alignItems:"stretch"}}>
