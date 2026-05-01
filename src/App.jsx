@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "./supabase";
-import { Heart, MessageCircle, Share2, Settings, X, Camera, Home, Plus, User, Pencil, Trash2, LogOut, Download, Sun, Moon, Check, MoreVertical, Info } from "lucide-react";
+import { Heart, MessageCircle, Share2, Settings, X, Camera, Home, Plus, User, Pencil, Trash2, LogOut, Download, Sun, Moon, Check, MoreVertical, Info, ChevronLeft } from "lucide-react";
 
 const THEMES = {
   dark: {
@@ -235,7 +235,7 @@ function Avatar({url,name,size=34}){
   );
 }
 
-function SessionCard({s,isOwn,isAdmin,onDelete,onEdit,avatarUrl,me,isFollowing,onFollow,onUnfollow}){
+function SessionCard({s,isOwn,isAdmin,onDelete,onEdit,avatarUrl,me,isFollowing,onFollow,onUnfollow,onUserClick}){
   const [expanded,setExpanded]=useState(false);
   const [showMenu,setShowMenu]=useState(false);
   const [confirming,setConfirming]=useState(false);
@@ -342,8 +342,10 @@ function SessionCard({s,isOwn,isAdmin,onDelete,onEdit,avatarUrl,me,isFollowing,o
       {/* ヘッダー */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 16px"}}>
         <div style={{display:"flex",alignItems:"center",gap:9}}>
-          <Avatar url={avatarUrl} name={s.user}/>
-          <div style={{fontSize:12,fontWeight:700,color:C.point,letterSpacing:"0.06em"}}>{s.user||"—"}</div>
+          <div onClick={()=>!isOwn&&onUserClick?.(s.userId,s.user,avatarUrl)} style={{cursor:!isOwn&&onUserClick?"pointer":"default",display:"flex",alignItems:"center",gap:9}}>
+            <Avatar url={avatarUrl} name={s.user}/>
+            <div style={{fontSize:12,fontWeight:700,color:C.point,letterSpacing:"0.06em"}}>{s.user||"—"}</div>
+          </div>
           {!isOwn&&onFollow&&(
             <button onClick={()=>isFollowing?onUnfollow(s.userId):onFollow(s.userId)}
               style={{fontSize:9,padding:"2px 8px",borderRadius:10,border:`1px solid ${isFollowing?C.border:C.accent}`,background:isFollowing?"transparent":"rgba(0,200,255,0.1)",color:isFollowing?C.textDim:C.accent,fontFamily:"inherit",cursor:"pointer",letterSpacing:"0.05em",lineHeight:1.5}}>
@@ -491,6 +493,59 @@ function SessionCard({s,isOwn,isAdmin,onDelete,onEdit,avatarUrl,me,isFollowing,o
   );
 }
 
+function UserProfilePage({userId,username,avatarUrl,me,isAdmin,onClose,isFollowing,onFollow,onUnfollow,onDelete,onEdit}){
+  const [sessions,setSessions]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [followerCount,setFollowerCount]=useState(0);
+  const [followingCount,setFollowingCount]=useState(0);
+  const isOwn=userId===me?.id;
+
+  useEffect(()=>{
+    setLoading(true);
+    supabase.from("sessions").select("*").eq("user_id",userId).order("created_at",{ascending:false})
+      .then(({data})=>{setSessions(data?.map(mapSession)||[]);setLoading(false);});
+    supabase.from("follows").select("id",{count:"exact",head:true}).eq("following_id",userId)
+      .then(({count})=>setFollowerCount(count||0));
+    supabase.from("follows").select("id",{count:"exact",head:true}).eq("follower_id",userId)
+      .then(({count})=>setFollowingCount(count||0));
+  },[userId]);
+
+  return(
+    <div style={{position:"fixed",inset:0,background:C.bg,zIndex:200,display:"flex",flexDirection:"column",maxWidth:600,margin:"0 auto"}}>
+      <div style={{padding:"10px 16px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8,flexShrink:0,background:C.panel}}>
+        <button onClick={onClose} style={{background:"none",border:"none",color:C.textDim,cursor:"pointer",padding:"4px",display:"flex",alignItems:"center"}}>
+          <ChevronLeft size={22} strokeWidth={1.8}/>
+        </button>
+        <div style={{color:C.text,fontSize:13,fontWeight:700,letterSpacing:"0.08em",flex:1}}>{username}</div>
+      </div>
+      <div style={{padding:"20px 16px",borderBottom:`1px solid ${C.border}`,background:C.panel,flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:14}}>
+          <Avatar url={avatarUrl} name={username} size={52}/>
+          <div style={{flex:1}}>
+            <div style={{fontSize:15,fontWeight:700,color:C.text}}>{username}</div>
+            <div style={{fontSize:10,color:C.textDim,marginTop:2,display:"flex",gap:12}}>
+              <span>{sessions.length} セッション</span>
+              <span>{followingCount} フォロー</span>
+              <span>{followerCount} フォロワー</span>
+            </div>
+          </div>
+          {!isOwn&&(
+            <button onClick={()=>isFollowing?onUnfollow(userId):onFollow(userId)}
+              style={{fontSize:11,padding:"7px 16px",borderRadius:6,border:`1px solid ${isFollowing?C.border:C.accent}`,background:isFollowing?"transparent":C.accent,color:isFollowing?C.textDim:C.bg,fontFamily:"inherit",cursor:"pointer",fontWeight:700,letterSpacing:"0.06em"}}>
+              {isFollowing?"フォロー中":"フォロー"}
+            </button>
+          )}
+        </div>
+      </div>
+      <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+        {loading&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:60}}>読み込み中...</div>}
+        {!loading&&sessions.length===0&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:60}}>まだ投稿がありません</div>}
+        {sessions.map(s=><SessionCard key={s.id} s={s} isOwn={s.userId===me?.id} isAdmin={isAdmin} onDelete={onDelete} onEdit={onEdit} avatarUrl={avatarUrl} me={me}/>)}
+      </div>
+    </div>
+  );
+}
+
 function EditModal({session,onSave,onClose,pastLocations=[]}){
   const [cond,setCond]=useState({...session.cond});
   const [saving,setSaving]=useState(false);
@@ -552,7 +607,7 @@ function DeleteAccountModal({onConfirm,onClose}){
   );
 }
 
-function FeedPage({sessions,loading,myUserId,isAdmin,onDelete,onEdit,profileMap,me,followingIds,onFollow,onUnfollow}){
+function FeedPage({sessions,loading,myUserId,isAdmin,onDelete,onEdit,profileMap,me,followingIds,onFollow,onUnfollow,onUserClick}){
   const [feedTab,setFeedTab]=useState("following");
   const [search,setSearch]=useState("");
   const [showFilter,setShowFilter]=useState(false);
@@ -608,7 +663,7 @@ function FeedPage({sessions,loading,myUserId,isAdmin,onDelete,onEdit,profileMap,
             {!isAdmin&&feedTab==="following"&&followingIds.size===0?"誰もフォローしていません\nフォローするとここに投稿が表示されます":"まだ投稿がありません"}
           </div>
         )}
-        {filtered.map(s=><SessionCard key={s.id} s={s} isOwn={s.userId===myUserId} isAdmin={isAdmin} onDelete={onDelete} onEdit={onEdit} avatarUrl={profileMap?.[s.userId]} me={me} isFollowing={followingIds?.has(s.userId)} onFollow={onFollow} onUnfollow={onUnfollow}/>)}
+        {filtered.map(s=><SessionCard key={s.id} s={s} isOwn={s.userId===myUserId} isAdmin={isAdmin} onDelete={onDelete} onEdit={onEdit} avatarUrl={profileMap?.[s.userId]} me={me} isFollowing={followingIds?.has(s.userId)} onFollow={onFollow} onUnfollow={onUnfollow} onUserClick={onUserClick}/>)}
       </div>
     </div>
   );
@@ -956,6 +1011,7 @@ export default function App() {
   const [showOnboarding,setShowOnboarding]=useState(false);
   const [followingIds,setFollowingIds]=useState(new Set());
   const [followerCount,setFollowerCount]=useState(0);
+  const [viewingProfile,setViewingProfile]=useState(null);
   C=THEMES[theme];
 
   const canvasRef=useRef(null);
@@ -1342,7 +1398,8 @@ export default function App() {
             sessions={feedSessions}
             loading={feedLoading} myUserId={authUser.id} isAdmin={authUser.email===ADMIN_EMAIL}
             onDelete={handleDelete} onEdit={setEditingSession} profileMap={profileMap} me={me}
-            followingIds={followingIds} onFollow={handleFollow} onUnfollow={handleUnfollow}/>}
+            followingIds={followingIds} onFollow={handleFollow} onUnfollow={handleUnfollow}
+            onUserClick={(uid,uname,uavatar)=>setViewingProfile({userId:uid,username:uname,avatarUrl:uavatar})}/>}
 
         {page==="analyze"&&(
           <>
@@ -1474,6 +1531,13 @@ export default function App() {
         )}
       </div>
 
+      {viewingProfile&&<UserProfilePage
+        userId={viewingProfile.userId} username={viewingProfile.username} avatarUrl={viewingProfile.avatarUrl}
+        me={me} isAdmin={authUser.email===ADMIN_EMAIL}
+        onClose={()=>setViewingProfile(null)}
+        isFollowing={followingIds.has(viewingProfile.userId)}
+        onFollow={handleFollow} onUnfollow={handleUnfollow}
+        onDelete={handleDelete} onEdit={setEditingSession}/>}
       {editingSession&&<EditModal session={editingSession} onSave={handleEditSave} onClose={()=>setEditingSession(null)} pastLocations={[...new Set(mySessions.map(s=>s.cond?.location).filter(Boolean))]}/>}
 
       {/* ボトムナビ */}
