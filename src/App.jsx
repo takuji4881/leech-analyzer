@@ -553,16 +553,21 @@ function DeleteAccountModal({onConfirm,onClose}){
 }
 
 function FeedPage({sessions,loading,myUserId,isAdmin,onDelete,onEdit,profileMap,me,followingIds,onFollow,onUnfollow}){
+  const [feedTab,setFeedTab]=useState("following");
   const [search,setSearch]=useState("");
   const [showFilter,setShowFilter]=useState(false);
   const [fWind,setFWind]=useState("");
   const [fWave,setFWave]=useState("");
 
-  const winds=[...new Set(sessions.map(s=>s.cond?.windKnots).filter(Boolean))];
-  const waves=[...new Set(sessions.map(s=>s.cond?.waveHeight).filter(Boolean))];
+  const tabSessions=(isAdmin||feedTab==="all")
+    ?sessions
+    :sessions.filter(s=>s.userId===myUserId||followingIds.has(s.userId));
+
+  const winds=[...new Set(tabSessions.map(s=>s.cond?.windKnots).filter(Boolean))];
+  const waves=[...new Set(tabSessions.map(s=>s.cond?.waveHeight).filter(Boolean))];
   const hasFilter=search||fWind||fWave;
 
-  const filtered=sessions.filter(s=>{
+  const filtered=tabSessions.filter(s=>{
     const q=search.toLowerCase();
     const matchQ=!q||[s.user,s.cond?.boatClass,s.cond?.location,s.cond?.comment].some(v=>v?.toLowerCase().includes(q));
     return matchQ&&(!fWind||s.cond?.windKnots===fWind)&&(!fWave||s.cond?.waveHeight===fWave);
@@ -570,6 +575,14 @@ function FeedPage({sessions,loading,myUserId,isAdmin,onDelete,onEdit,profileMap,
 
   return(
     <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
+      <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+        {[["following","フォロー中"],["all","みんな"]].map(([tab,label])=>(
+          <button key={tab} onClick={()=>setFeedTab(tab)}
+            style={{flex:1,padding:"9px 0",fontSize:11,fontFamily:"inherit",border:"none",background:"none",color:feedTab===tab?C.accent:C.textDim,borderBottom:`2px solid ${feedTab===tab?C.accent:"transparent"}`,cursor:"pointer",letterSpacing:"0.08em",fontWeight:feedTab===tab?700:400}}>
+            {label}
+          </button>
+        ))}
+      </div>
       <div style={{padding:"8px 12px",borderBottom:`1px solid ${C.border}`,flexShrink:0,display:"flex",gap:8,alignItems:"center"}}>
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="検索..."
           style={{flex:1,background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,borderRadius:20,padding:"6px 12px",color:C.text,fontSize:11,fontFamily:"inherit",outline:"none"}}/>
@@ -592,7 +605,7 @@ function FeedPage({sessions,loading,myUserId,isAdmin,onDelete,onEdit,profileMap,
         {loading&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:60}}>読み込み中...</div>}
         {!loading&&filtered.length===0&&(
           <div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:60,lineHeight:2,padding:"0 24px"}}>
-            {!isAdmin&&followingIds.size===0?"誰もフォローしていません\nフォローするとここに投稿が表示されます":"まだ投稿がありません"}
+            {!isAdmin&&feedTab==="following"&&followingIds.size===0?"誰もフォローしていません\nフォローするとここに投稿が表示されます":"まだ投稿がありません"}
           </div>
         )}
         {filtered.map(s=><SessionCard key={s.id} s={s} isOwn={s.userId===myUserId} isAdmin={isAdmin} onDelete={onDelete} onEdit={onEdit} avatarUrl={profileMap?.[s.userId]} me={me} isFollowing={followingIds?.has(s.userId)} onFollow={onFollow} onUnfollow={onUnfollow}/>)}
@@ -1297,7 +1310,7 @@ export default function App() {
   const me={id:authUser.id,username:profileUsername,avatarUrl:profileMap[authUser.id]||null};
 
   const navItems=[
-    {id:"feed",label:"フィード",Icon:Home},
+    {id:"feed",label:"ホーム",Icon:Home},
     {id:"analyze",label:"投稿",Icon:Plus},
     {id:"mypage",label:"マイページ",Icon:User},
   ];
@@ -1326,7 +1339,7 @@ export default function App() {
       <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
 
         {page==="feed"&&<FeedPage
-            sessions={authUser.email===ADMIN_EMAIL?feedSessions:feedSessions.filter(s=>s.userId===authUser.id||followingIds.has(s.userId))}
+            sessions={feedSessions}
             loading={feedLoading} myUserId={authUser.id} isAdmin={authUser.email===ADMIN_EMAIL}
             onDelete={handleDelete} onEdit={setEditingSession} profileMap={profileMap} me={me}
             followingIds={followingIds} onFollow={handleFollow} onUnfollow={handleUnfollow}/>}
