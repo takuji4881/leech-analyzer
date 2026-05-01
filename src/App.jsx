@@ -235,7 +235,7 @@ function Avatar({url,name,size=34}){
   );
 }
 
-function SessionCard({s,isOwn,isAdmin,onDelete,onEdit,avatarUrl,me}){
+function SessionCard({s,isOwn,isAdmin,onDelete,onEdit,avatarUrl,me,isFollowing,onFollow,onUnfollow}){
   const [expanded,setExpanded]=useState(false);
   const [showMenu,setShowMenu]=useState(false);
   const [confirming,setConfirming]=useState(false);
@@ -344,6 +344,12 @@ function SessionCard({s,isOwn,isAdmin,onDelete,onEdit,avatarUrl,me}){
         <div style={{display:"flex",alignItems:"center",gap:9}}>
           <Avatar url={avatarUrl} name={s.user}/>
           <div style={{fontSize:12,fontWeight:700,color:C.point,letterSpacing:"0.06em"}}>{s.user||"—"}</div>
+          {!isOwn&&onFollow&&(
+            <button onClick={()=>isFollowing?onUnfollow(s.userId):onFollow(s.userId)}
+              style={{fontSize:9,padding:"2px 8px",borderRadius:10,border:`1px solid ${isFollowing?C.border:C.accent}`,background:isFollowing?"transparent":"rgba(0,200,255,0.1)",color:isFollowing?C.textDim:C.accent,fontFamily:"inherit",cursor:"pointer",letterSpacing:"0.05em",lineHeight:1.5}}>
+              {isFollowing?"フォロー中":"フォロー"}
+            </button>
+          )}
         </div>
         <div style={{display:"flex",alignItems:"center",gap:8,position:"relative"}}>
           <div style={{fontSize:10,color:C.textDim}}>{s.cond?.date}{s.cond?.location&&` · ${s.cond.location}`}</div>
@@ -546,7 +552,7 @@ function DeleteAccountModal({onConfirm,onClose}){
   );
 }
 
-function FeedPage({sessions,loading,myUserId,isAdmin,onDelete,onEdit,profileMap,me}){
+function FeedPage({sessions,loading,myUserId,isAdmin,onDelete,onEdit,profileMap,me,followingIds,onFollow,onUnfollow}){
   const [search,setSearch]=useState("");
   const [showFilter,setShowFilter]=useState(false);
   const [fWind,setFWind]=useState("");
@@ -584,14 +590,18 @@ function FeedPage({sessions,loading,myUserId,isAdmin,onDelete,onEdit,profileMap,
       )}
       <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
         {loading&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:60}}>読み込み中...</div>}
-        {!loading&&filtered.length===0&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:60}}>まだ投稿がありません</div>}
-        {filtered.map(s=><SessionCard key={s.id} s={s} isOwn={s.userId===myUserId} isAdmin={isAdmin} onDelete={onDelete} onEdit={onEdit} avatarUrl={profileMap?.[s.userId]} me={me}/>)}
+        {!loading&&filtered.length===0&&(
+          <div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:60,lineHeight:2,padding:"0 24px"}}>
+            {!isAdmin&&followingIds.size===0?"誰もフォローしていません\nフォローするとここに投稿が表示されます":"まだ投稿がありません"}
+          </div>
+        )}
+        {filtered.map(s=><SessionCard key={s.id} s={s} isOwn={s.userId===myUserId} isAdmin={isAdmin} onDelete={onDelete} onEdit={onEdit} avatarUrl={profileMap?.[s.userId]} me={me} isFollowing={followingIds?.has(s.userId)} onFollow={onFollow} onUnfollow={onUnfollow}/>)}
       </div>
     </div>
   );
 }
 
-function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout,onExport,onDelete,onEdit,avatarUrl,onAvatarUpload,onDeleteAccount,me}){
+function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout,onExport,onDelete,onEdit,avatarUrl,onAvatarUpload,onDeleteAccount,me,followingCount,followerCount}){
   const [editing,setEditing]=useState(false);
   const [newName,setNewName]=useState(username);
   const [saving,setSaving]=useState(false);
@@ -626,7 +636,11 @@ function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout
             {!editing?(
               <>
                 <div style={{fontSize:15,fontWeight:700,color:C.text}}>{username}</div>
-                <div style={{fontSize:10,color:C.textDim,marginTop:2}}>{sessions.length} セッション</div>
+                <div style={{fontSize:10,color:C.textDim,marginTop:2,display:"flex",gap:12}}>
+                  <span>{sessions.length} セッション</span>
+                  <span>{followingCount} フォロー</span>
+                  <span>{followerCount} フォロワー</span>
+                </div>
               </>
             ):(
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
@@ -927,6 +941,8 @@ export default function App() {
   const [theme,setTheme]=useState(()=>localStorage.getItem("leech_theme")||"dark");
   const [isMobile,setIsMobile]=useState(window.innerWidth<640);
   const [showOnboarding,setShowOnboarding]=useState(false);
+  const [followingIds,setFollowingIds]=useState(new Set());
+  const [followerCount,setFollowerCount]=useState(0);
   C=THEMES[theme];
 
   const canvasRef=useRef(null);
@@ -988,6 +1004,23 @@ export default function App() {
         if(!error&&data)setMySessions(data.map(mapSession));
       });
   },[authUser]);
+
+  useEffect(()=>{
+    if(!authUser)return;
+    supabase.from("follows").select("following_id").eq("follower_id",authUser.id)
+      .then(({data})=>setFollowingIds(new Set(data?.map(f=>f.following_id)||[])));
+    supabase.from("follows").select("id",{count:"exact",head:true}).eq("following_id",authUser.id)
+      .then(({count})=>setFollowerCount(count||0));
+  },[authUser]);
+
+  const handleFollow=async(userId)=>{
+    await supabase.from("follows").insert({follower_id:authUser.id,following_id:userId});
+    setFollowingIds(prev=>new Set([...prev,userId]));
+  };
+  const handleUnfollow=async(userId)=>{
+    await supabase.from("follows").delete().eq("follower_id",authUser.id).eq("following_id",userId);
+    setFollowingIds(prev=>{const n=new Set(prev);n.delete(userId);return n;});
+  };
 
   const draw=useCallback(()=>{
     const canvas=canvasRef.current,wrapper=wrapperRef.current;
@@ -1292,7 +1325,11 @@ export default function App() {
       {/* コンテンツ */}
       <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
 
-        {page==="feed"&&<FeedPage sessions={feedSessions} loading={feedLoading} myUserId={authUser.id} isAdmin={authUser.email===ADMIN_EMAIL} onDelete={handleDelete} onEdit={setEditingSession} profileMap={profileMap} me={me}/>}
+        {page==="feed"&&<FeedPage
+            sessions={authUser.email===ADMIN_EMAIL?feedSessions:feedSessions.filter(s=>s.userId===authUser.id||followingIds.has(s.userId))}
+            loading={feedLoading} myUserId={authUser.id} isAdmin={authUser.email===ADMIN_EMAIL}
+            onDelete={handleDelete} onEdit={setEditingSession} profileMap={profileMap} me={me}
+            followingIds={followingIds} onFollow={handleFollow} onUnfollow={handleUnfollow}/>}
 
         {page==="analyze"&&(
           <>
@@ -1418,6 +1455,8 @@ export default function App() {
             onAvatarUpload={handleAvatarUpload}
             onDeleteAccount={handleDeleteAccount}
             me={me}
+            followingCount={followingIds.size}
+            followerCount={followerCount}
           />
         )}
       </div>
