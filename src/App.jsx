@@ -498,6 +498,7 @@ function UserProfilePage({userId,username,avatarUrl,me,isAdmin,onClose,isFollowi
   const [loading,setLoading]=useState(true);
   const [followerCount,setFollowerCount]=useState(0);
   const [followingCount,setFollowingCount]=useState(0);
+  const [bio,setBio]=useState("");
   const isOwn=userId===me?.id;
 
   useEffect(()=>{
@@ -508,6 +509,8 @@ function UserProfilePage({userId,username,avatarUrl,me,isAdmin,onClose,isFollowi
       .then(({count})=>setFollowerCount(count||0));
     supabase.from("follows").select("id",{count:"exact",head:true}).eq("follower_id",userId)
       .then(({count})=>setFollowingCount(count||0));
+    supabase.from("profiles").select("bio").eq("id",userId).single()
+      .then(({data})=>setBio(data?.bio||""));
   },[userId]);
 
   return(
@@ -521,7 +524,7 @@ function UserProfilePage({userId,username,avatarUrl,me,isAdmin,onClose,isFollowi
       <div style={{padding:"20px 16px",borderBottom:`1px solid ${C.border}`,background:C.panel,flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",gap:14}}>
           <Avatar url={avatarUrl} name={username} size={52}/>
-          <div style={{flex:1}}>
+          <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:15,fontWeight:700,color:C.text}}>{username}</div>
             <div style={{fontSize:10,color:C.textDim,marginTop:2,display:"flex",gap:12}}>
               <span>{sessions.length} セッション</span>
@@ -536,6 +539,7 @@ function UserProfilePage({userId,username,avatarUrl,me,isAdmin,onClose,isFollowi
             </button>
           )}
         </div>
+        {bio&&<div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`,fontSize:12,color:C.text,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{bio}</div>}
       </div>
       <div style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
         {loading&&<div style={{color:C.textDim,fontSize:11,textAlign:"center",marginTop:60}}>読み込み中...</div>}
@@ -669,11 +673,23 @@ function FeedPage({sessions,loading,myUserId,isAdmin,onDelete,onEdit,profileMap,
   );
 }
 
-function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout,onExport,onDelete,onEdit,avatarUrl,onAvatarUpload,onDeleteAccount,me,followingCount,followerCount}){
+function MyPage({sessions,username,onUsernameChange,bio,onBioChange,theme,onThemeToggle,onLogout,onExport,onDelete,onEdit,avatarUrl,onAvatarUpload,onDeleteAccount,me,followingCount,followerCount}){
   const [editing,setEditing]=useState(false);
   const [newName,setNewName]=useState(username);
   const [saving,setSaving]=useState(false);
   const [err,setErr]=useState("");
+  const [editingBio,setEditingBio]=useState(false);
+  const [bioText,setBioText]=useState(bio||"");
+  const [savingBio,setSavingBio]=useState(false);
+
+  const handleSaveBio=async()=>{
+    setSavingBio(true);
+    const{data:{user}}=await supabase.auth.getUser();
+    await supabase.from("profiles").update({bio:bioText.trim()}).eq("id",user.id);
+    setSavingBio(false);
+    onBioChange(bioText.trim());
+    setEditingBio(false);
+  };
   const [showDeleteAccount,setShowDeleteAccount]=useState(false);
   const [showSettings,setShowSettings]=useState(false);
   const avatarInputRef=useRef(null);
@@ -727,6 +743,25 @@ function MyPage({sessions,username,onUsernameChange,theme,onThemeToggle,onLogout
               style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:8,width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,color:C.textDim}}>
               <Settings size={18} strokeWidth={1.8}/>
             </button>
+          )}
+        </div>
+        <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+          {!editingBio?(
+            <div onClick={()=>{setEditingBio(true);setBioText(bio||"");}} style={{cursor:"pointer",minHeight:24}}>
+              {bio
+                ?<div style={{fontSize:12,color:C.text,lineHeight:1.8,whiteSpace:"pre-wrap"}}>{bio}</div>
+                :<div style={{fontSize:11,color:C.textDim}}>+ プロフィールを追加</div>
+              }
+            </div>
+          ):(
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              <textarea value={bioText} onChange={e=>setBioText(e.target.value)} placeholder="自己紹介を書いてください..." rows={3}
+                style={{background:"rgba(255,255,255,0.05)",border:`1px solid ${C.accent}`,borderRadius:4,padding:"6px 10px",color:C.text,fontSize:12,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box",resize:"none",lineHeight:1.8}}/>
+              <div style={{display:"flex",gap:8}}>
+                <Btn onClick={handleSaveBio} disabled={savingBio} style={{fontSize:10}}>{savingBio?"保存中":"保存"}</Btn>
+                <Btn onClick={()=>{setEditingBio(false);setBioText(bio||"");}} secondary style={{fontSize:10}}>キャンセル</Btn>
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -1005,6 +1040,7 @@ export default function App() {
   const [authUser,setAuthUser]=useState(null);
   const [authReady,setAuthReady]=useState(false);
   const [profileUsername,setProfileUsername]=useState(null);
+  const [profileBio,setProfileBio]=useState("");
   const [profileLoading,setProfileLoading]=useState(true);
   const [theme,setTheme]=useState(()=>localStorage.getItem("leech_theme")||"dark");
   const [isMobile,setIsMobile]=useState(window.innerWidth<640);
@@ -1043,11 +1079,12 @@ export default function App() {
   useEffect(()=>{
     if(!authUser){setProfileUsername(null);setProfileLoading(false);return;}
     setProfileLoading(true);
-    supabase.from("profiles").select("id,username,avatar_url")
+    supabase.from("profiles").select("id,username,avatar_url,bio")
       .then(({data})=>{
         if(data){
           const myProfile=data.find(p=>p.id===authUser.id);
           setProfileUsername(myProfile?.username||null);
+          setProfileBio(myProfile?.bio||"");
           const map={};
           data.forEach(p=>{map[p.id]=p.avatar_url||null;});
           setProfileMap(map);
@@ -1510,6 +1547,8 @@ export default function App() {
           <MyPage
             sessions={mySessions}
             username={profileUsername}
+            bio={profileBio}
+            onBioChange={setProfileBio}
             onUsernameChange={name=>{
               setProfileUsername(name);
               setFeedSessions(prev=>prev.map(s=>s.user===profileUsername?{...s,user:name}:s));
